@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism · 网页连接回归测试</title>
+<link rel="stylesheet" href="../content/content.css">
+<style>
+  body { margin:48px auto; max-width:800px; padding:0 24px; background:#f6f8fa; color:#243b35; font:16px/1.7 -apple-system,sans-serif; }
+  h1 { font-size:26px; } button { padding:9px 15px; margin:4px; cursor:pointer; }
+  #sample { margin:36px 0; padding:24px; background:white; border-radius:16px; }
+  #results { padding-left:24px; } #results li { margin:5px 0; }
+  #status { font-weight:600; } .note { color:#63736d; font-size:14px; }
+</style>
+<h1>Prism · 网页连接回归测试</h1>
+<p class="note">加载实际 content.js，使用测试 Chrome API；译文为固定测试数据，不调用外部模型。</p>
+<div>
+  <button id="run">运行回归测试</button>
+  <button id="normal">正常翻译</button>
+  <button id="invalidate">模拟插件重载后翻译</button>
+  <button id="reinject">重新注入新版脚本</button>
+</div>
+<div id="sample">选词示例：<strong id="word">hello</strong></div>
+<p id="status">准备就绪</p>
+<ol id="results"></ol>
+<script type="module" src="./content-runtime-browser.js"></script>
+</html>

@@ -1,0 +1,11 @@
+# Local files and dependencies
+.DS_Store
+node_modules/
+.env
+.env.*
+!.env.example
+
+# Packaged extensions and signing keys
+*.crx
+*.pem
+*.key

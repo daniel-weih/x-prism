@@ -1,0 +1,9 @@
+{
+  "name": "prism-translate",
+  "version": "1.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node tests/run-tests.mjs && node --test tests/*.test.mjs"
+  }
+}

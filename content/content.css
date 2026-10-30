@@ -1,0 +1,28 @@
+#prism-translate-host {
+  all: initial;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.prism-page-translation {
+  box-sizing: border-box !important;
+  color: inherit !important;
+  font: inherit !important;
+  text-decoration: none !important;
+}
+
+.prism-page-translation.prism-page-translation-block {
+  display: block !important;
+  margin: 0.4em 0 0.65em !important;
+  padding-left: 0.8em !important;
+  border-left: 2px solid color-mix(in srgb, currentColor 28%, transparent) !important;
+}
+
+.prism-page-translation:not(.prism-page-translation-block) {
+  margin-inline-start: 0.45em !important;
+  padding-inline-start: 0.45em !important;
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 28%, transparent) !important;
+}

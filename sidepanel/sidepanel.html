@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prism Translate</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div class="brand-lockup">
+        <img class="brand-icon" src="../assets/icon.svg" width="40" height="40" alt="">
+        <div><h1>Prism</h1><p data-i18n="brandSubtitle">Translate without breaking your flow</p></div>
+      </div>
+      <button class="status-pill" id="provider-status" type="button" title="Open settings" data-i18n-label="openSettings"><span></span><b>LOCAL</b></button>
+    </header>
+
+    <nav class="tab-bar" aria-label="Sections">
+      <button class="tab active" data-tab="translate" type="button"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h12M9 3v2M5 5c0 5 4 8 8 10M13 5c0 5-4 8-9 10M14 21l4-10 4 10M16 17h4"/></svg></span><b data-i18n="tabTranslate">Translate</b></button>
+      <button class="tab" data-tab="page" type="button"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16M14 9h3M14 13h3"/></svg></span><b data-i18n="tabPage">Page</b></button>
+      <button class="tab" data-tab="history" type="button"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b data-i18n="tabHistory">History</b></button>
+      <button class="tab" data-tab="settings" type="button"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h6M14 7h6M4 17h10M18 17h2"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg></span><b data-i18n="tabSettings">Settings</b></button>
+    </nav>
+
+    <section class="panel active" data-panel="translate">
+      <div class="language-deck surface-card">
+        <label><span data-i18n="from">From</span><select id="source-language"></select></label>
+        <button class="swap-button" id="swap-languages" type="button" title="Swap languages" data-i18n-label="swap">⇄</button>
+        <label><span data-i18n="to">To</span><select id="target-language"></select></label>
+      </div>
+
+      <section class="composer surface-card">
+        <div class="composer-toolbar"><span class="eyebrow" data-i18n="sourceText">Source text</span><span id="character-count">0 / 12,000</span></div>
+        <textarea data-i18n-label="sourceText" id="source-text" maxlength="12000" data-i18n-placeholder="sourcePlaceholder" placeholder="Type, paste, or select text on any page…"></textarea>
+        <div class="composer-actions">
+          <div><button class="ghost-button" id="paste-text" type="button" data-i18n="paste">Paste</button><button class="ghost-button" id="clear-text" type="button" data-i18n="clear">Clear</button></div>
+          <span class="shortcut" id="input-shortcut">Ctrl ↵</span>
+        </div>
+      </section>
+
+      <button class="primary-button" id="translate-button" type="button"><span class="button-gem">✦</span><b data-i18n="translateNow">Translate now</b><i>→</i></button>
+
+      <section class="result-card surface-card" id="result-card">
+        <div class="result-header"><div><span class="eyebrow" data-i18n="translation">Translation</span><span class="language-route" id="language-route"></span></div><span class="provider-badge" id="result-provider">LOCAL</span></div>
+        <div class="result-empty" id="result-empty"><img class="brand-icon empty-logo" src="../assets/icon.svg" width="36" height="36" alt=""><p data-i18n="resultHint">Your translation will appear here.</p></div>
+        <div class="pronunciation" id="pronunciation" hidden aria-live="polite"><span id="pronunciation-text"></span><button id="speak-source" type="button" data-i18n="listenWord">Listen to word</button></div>
+        <p class="result-text" id="result-text" role="status"></p>
+        <div class="download-progress" id="model-progress" hidden aria-hidden="true"><span></span></div>
+        <div class="result-actions" id="result-actions">
+          <button type="button" id="copy-result"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg> <span data-i18n="copy">Copy</span></button>
+          <button type="button" id="speak-result"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg> <span data-i18n="listen">Listen</span></button>
+          <button type="button" id="favorite-result">☆ <span data-i18n="save">Save</span></button>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel" data-panel="page">
+      <section class="page-hero surface-card">
+        <img class="brand-icon page-logo" src="../assets/icon.svg" width="48" height="48" alt="">
+        <div class="page-copy"><span class="eyebrow" data-i18n="currentTab">Current tab</span><h2 id="page-title">Open a web page</h2><p id="page-url">—</p></div>
+      </section>
+      <section class="section-card surface-card">
+        <div class="section-heading"><div><h3 data-i18n="readingMode">Reading mode</h3><p data-i18n="readingModeHint">Choose how translated text appears.</p></div></div>
+        <div class="segmented-control" id="page-mode">
+          <button class="active" data-mode="bilingual" type="button"><b data-i18n="bilingual">Bilingual</b><small data-i18n="bilingualHint">Original + translation</small></button>
+          <button data-mode="translated" type="button"><b data-i18n="translatedOnly">Translation</b><small data-i18n="translatedHint">Replace original text</small></button>
+        </div>
+      </section>
+      <section class="scan-card surface-card">
+        <div class="scan-visual"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18"/></svg></div>
+        <div><h3 id="page-status" role="status">Ready to translate this page</h3><p id="page-detail">Navigation, code, forms, and hidden content are skipped.</p></div>
+        <div class="page-progress" id="page-progress" hidden aria-hidden="true"><span id="page-progress-bar"></span></div>
+      </section>
+      <button class="primary-button" id="translate-page" type="button"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16M14 9h3M14 13h3"/></svg><b data-i18n="translatePage">Translate this page</b><i>→</i></button>
+      <button class="secondary-button" id="restore-page" type="button" disabled><span>↶</span><b data-i18n="restoreOriginal">Restore original page</b></button>
+      <p class="privacy-note"><span>◈</span><span data-i18n="pagePrivacy">Local mode keeps page text on this device. Cloud modes send only collected text to your chosen provider.</span></p>
+    </section>
+
+    <section class="panel" data-panel="history">
+      <div class="section-title"><div><span class="eyebrow" data-i18n="yourLibrary">Your library</span><h2 data-i18n="recentTranslations">Recent translations</h2></div><button class="danger-link" id="clear-history" type="button" data-i18n="clearAll">Clear all</button></div>
+      <div class="search-row surface-card"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><input id="history-search" type="search" data-i18n-placeholder="searchHistory" placeholder="Search source or translation"><button id="favorites-only" type="button" data-i18n-label="favoritesOnly" aria-pressed="false">☆</button></div>
+      <div class="history-list" id="history-list"></div>
+      <div class="empty-state" id="history-empty"><div><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3 data-i18n="noHistory">No translations yet</h3><p data-i18n="noHistoryHint">Translations you save will be waiting here.</p></div>
+    </section>
+
+    <section class="panel" data-panel="settings">
+      <div class="settings-save-bar">
+        <button class="primary-button" id="save-settings" type="button" disabled><span class="button-gem">✓</span><b data-i18n="saveSettings">Save settings</b><i></i></button>
+      </div>
+      <section class="section-card surface-card">
+        <div class="section-heading"><div><h3 data-i18n="translationEngine">Translation engine</h3><p data-i18n="engineHint">Local by default. Cloud is always explicit.</p></div></div>
+        <div class="provider-grid" id="provider-grid"></div>
+        <div class="provider-config" id="chrome-config"><p class="config-hint" data-i18n="localEngineHint">Text is translated on this device. Chrome may download a local language pack the first time you use a language pair.</p></div>
+        <div class="provider-config" id="mymemory-config"><p class="config-hint" data-i18n="myMemoryHint">An online service with no API key. Text is sent to MyMemory; daily usage limits apply.</p></div>
+        <div class="provider-config" id="openai-config">
+          <label><span data-i18n="kimiConnection">Connection</span><select id="openai-connection"><option value="cli" data-i18n="openaiCli">Local Codex CLI</option><option value="api" data-i18n="openaiApi">API</option></select></label>
+          <div class="connection-config" id="openai-cli-config">
+            <p class="config-hint" data-i18n="codexHint">Use your local Codex login. Translation runs through your configured Codex service.</p>
+            <button class="secondary-button" id="codex-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
+            <p class="connection-status" id="codex-status" role="status"></p>
+            <label><span data-i18n="model">Model</span><select id="codex-model"></select></label>
+            <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="codex-effort"></select></label>
+            <p class="config-hint" data-i18n="effortHint">Lower reasoning is usually faster for translation.</p>
+            <details class="codex-setup"><summary data-i18n="codexSetup">First-time setup</summary>
+              <p data-i18n="codexSetupHint">In the project folder, run this once, then detect the connection. Requires Node.js and a signed-in Codex CLI.</p>
+              <code id="codex-install-command"></code>
+              <button class="ghost-button" id="copy-codex-command" type="button" data-i18n="copy">Copy</button>
+            </details>
+          </div>
+          <div class="connection-config" id="openai-api-config" hidden>
+            <p class="config-hint" data-i18n="openaiApiHint">Use an API key independently of your Codex CLI login. OpenAI-compatible services are also supported.</p>
+            <label><span data-i18n="endpoint">Endpoint</span><input id="openai-endpoint" type="url" autocomplete="off" spellcheck="false"></label>
+            <label><span data-i18n="apiKey">API key</span><input id="openai-key" type="password" autocomplete="off" placeholder="••••••••••••" spellcheck="false"></label>
+            <button class="secondary-button" id="openai-api-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
+            <p class="connection-status" id="openai-api-status" role="status"></p>
+            <label><span data-i18n="model">Model</span><input id="openai-model" type="text" list="openai-api-models" autocomplete="off" spellcheck="false" data-i18n-placeholder="kimiModelHint" placeholder="Detect models or enter a model ID"><datalist id="openai-api-models"></datalist></label>
+            <p class="config-hint" data-i18n="openaiModelHint">Choose a text chat model. If model detection is unavailable, enter the model ID manually.</p>
+            <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="openai-effort" aria-describedby="openai-effort-hint"></select></label>
+            <p class="config-hint" id="openai-effort-hint" data-i18n="openaiEffortHint">Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.</p>
+          </div>
+        </div>
+        <div class="provider-config" id="kimi-config">
+          <label><span data-i18n="kimiConnection">Connection</span><select id="kimi-connection"><option value="cli" data-i18n="kimiCli">Local CLI</option><option value="api" data-i18n="kimiApi">Open Platform API</option></select></label>
+          <div class="connection-config" id="kimi-cli-config">
+            <p class="config-hint" data-i18n="kimiCliHint">Uses your Kimi Code login and cloud service. Thinking follows your CLI configuration.</p>
+            <button class="secondary-button" id="kimi-cli-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
+            <p class="connection-status" id="kimi-cli-status" role="status"></p>
+            <label><span data-i18n="model">Model</span><select id="kimi-cli-model"></select></label>
+            <details class="codex-setup"><summary data-i18n="codexSetup">First-time setup</summary>
+              <p data-i18n="kimiSetupHint">Run this once in the Prism project folder. Requires Node.js and a signed-in Kimi Code CLI.</p>
+              <code id="kimi-install-command"></code>
+              <button class="ghost-button" id="copy-kimi-command" type="button" data-i18n="copy">Copy</button>
+            </details>
+          </div>
+          <div class="connection-config" id="kimi-api-config" hidden>
+            <p class="config-hint" data-i18n="kimiApiHint">Use a Kimi Open Platform API key, billed separately from your Kimi Code subscription.</p>
+            <label><span data-i18n="kimiRegion">Service region</span><select id="kimi-api-region"><option value="cn" data-i18n="kimiCn">China · api.moonshot.cn</option><option value="global" data-i18n="kimiGlobal">Global · api.moonshot.ai</option></select></label>
+            <label><span data-i18n="apiKey">API key</span><input id="kimi-api-key" type="password" autocomplete="off" placeholder="••••••••••••" spellcheck="false"></label>
+            <button class="secondary-button" id="kimi-api-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
+            <p class="connection-status" id="kimi-api-status" role="status"></p>
+            <label><span data-i18n="model">Model</span><input id="kimi-api-model" type="text" list="kimi-api-models" autocomplete="off" spellcheck="false" data-i18n-placeholder="kimiModelHint" placeholder="Detect models or enter a model ID"><datalist id="kimi-api-models"></datalist></label>
+            <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="kimi-api-thinking"></select></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card surface-card compact-settings">
+        <label class="setting-row"><span><b data-i18n="interfaceLanguage">Interface language</b><small data-i18n="interfaceLanguageHint">Follow Chrome or choose manually</small></span><select id="ui-language"><option value="auto" data-i18n="auto">Follow Chrome</option><option value="en">English</option><option value="zh">中文</option></select></label>
+        <label class="setting-row"><span><b data-i18n="appearance">Appearance</b><small data-i18n="appearanceHint">Choose a light or dark appearance</small></span><select id="theme"><option value="system" data-i18n="system">System</option><option value="light" data-i18n="light">Light</option><option value="dark" data-i18n="dark">Dark</option></select></label>
+        <label class="setting-row"><span><b data-i18n="selectionBubble">Selection bubble</b><small data-i18n="selectionBubbleHint">Show Prism after selecting text</small></span><input class="switch" id="selection-bubble" type="checkbox"></label>
+        <label class="setting-row"><span><b data-i18n="saveHistorySetting">Save history</b><small data-i18n="saveHistoryHint">Stored only in this browser profile</small></span><input class="switch" id="save-history" type="checkbox"></label>
+        <label class="setting-row range-row"><span><b data-i18n="pageLimit">Page segment limit</b><small id="page-limit-value">240</small></span><input id="page-limit" type="range" min="40" max="600" step="20"></label>
+      </section>
+      <p class="privacy-note"><span>◇</span><span data-i18n="keysPrivacy">API keys are kept in local extension storage and never synced by Prism.</span></p>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/open-dict-data/ipa-dict",
+  "revision": "972cd67dd5f96bc5660e28070cde26e3928abcd7",
+  "file": "data/en_US.txt",
+  "sourceSha256": "2af6f154a5c363275f052d1f85acedef38ed185ca9745aa4314be77f6b70de67",
+  "entries": 125927,
+  "retrieved": "2026-10-27",
+  "variant": "US English"
+}
