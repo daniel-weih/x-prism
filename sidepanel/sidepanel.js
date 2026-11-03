@@ -1,3 +1,4 @@
+import { createReader } from "./reader.js";
 import { LANGUAGES, OPENAI_REASONING_EFFORTS, PROVIDERS } from "../shared/config.js";
 import { kimiApiBase, kimiThinkingOptions } from "../shared/kimi-api.js";
 import { openaiApiOrigin } from "../shared/openai-api.js";
@@ -20,12 +21,12 @@ import {
 
 const copy = {
   en: {
-    brandSubtitle: "Translate without breaking your flow", tabTranslate: "Translate", tabPage: "Page", tabHistory: "History", tabSettings: "Settings",
+    brandSubtitle: "Web translation & read aloud", tabTranslate: "Translate", tabPage: "Page", tabHistory: "History", tabSettings: "Settings",
     from: "From", to: "To", sourceText: "Source text", sourcePlaceholder: "Type, paste, or select text on any page…", paste: "Paste", clear: "Clear", translateNow: "Translate now",
     translation: "Translation", resultHint: "Your translation will appear here.", copy: "Copy", listen: "Listen", save: "Favorite", currentTab: "Current tab",
     readingMode: "Reading mode", readingModeHint: "Choose how translated text appears.", bilingual: "Bilingual", bilingualHint: "Original + translation", translatedOnly: "Translation", translatedHint: "Replace original text",
     pageReady: "Ready to translate this page", pageReadyHint: "Navigation, code, forms, and hidden content are skipped.", translatePage: "Translate this page", restoreOriginal: "Restore original page",
-    pagePrivacy: "Local mode keeps page text on this device. Cloud modes send only collected text to your chosen provider.", yourLibrary: "Your library", recentTranslations: "Recent translations",
+    pagePrivacy: "Local translation stays on this device. Cloud translation uses your chosen provider; read aloud uses the API service configured for OpenAI translation.", yourLibrary: "Your library", recentTranslations: "Recent translations",
     clearAll: "Clear all", searchHistory: "Search source or translation", noHistory: "No translations yet", noHistoryHint: "Translations you save will be waiting here.",
     makeItYours: "Make Prism yours", translationEngine: "Translation engine", engineHint: "Local by default. Cloud is always explicit.", endpoint: "Endpoint", apiKey: "API key", apiKeyOptional: "API key (optional)", model: "Model",
     interfaceLanguage: "Interface language", interfaceLanguageHint: "Follow Chrome or choose manually", appearance: "Appearance", appearanceHint: "Choose a light or dark appearance", system: "System", light: "Light", dark: "Dark",
@@ -34,7 +35,7 @@ const copy = {
     enterText: "Enter some text first.", translating: "Translating…", downloading: "Downloading local translation pack…", pageTranslating: "Translating page", pageDone: "Page translated", pageRestored: "Original page restored",
     refreshPage: "Refresh this tab once so Prism can connect. Chrome settings, the Web Store, and new-tab pages cannot be translated.", restrictedPage: "Chrome protects this page from extensions.", noPageText: "No translatable text found.", segments: "segments", localUnavailable: "Local AI unavailable",
     historyCleared: "History cleared", openPage: "Open a web page", providerPermissionDenied: "Host access was not granted. This provider cannot connect yet.",
-    listenWord: "Listen to word", noPronunciation: "Not in offline pronunciation dictionary", pronunciationUnavailable: "Pronunciation dictionary unavailable",
+    listenWord: "Read word", noPronunciation: "Not in offline pronunciation dictionary", pronunciationUnavailable: "Pronunciation dictionary unavailable",
     codexHint: "Uses your local Codex CLI and login. Text is sent to your configured Codex model service; this is not offline inference.",
     codexConnect: "Detect connection & refresh models", reasoningEffort: "Reasoning effort", effortHint: "Lower reasoning is usually faster for translation.",
     codexSetup: "First-time setup", codexSetupHint: "In the Prism project folder, run this once, then detect the connection. Requires Node.js and a signed-in Codex CLI.",
@@ -82,12 +83,12 @@ const copy = {
     myMemoryHint: "An online service with no API key. Text is sent to MyMemory; daily usage limits apply."
   },
   zh: {
-    brandSubtitle: "翻译不断流，阅读不出戏", tabTranslate: "翻译", tabPage: "网页", tabHistory: "历史", tabSettings: "设置",
+    brandSubtitle: "网页翻译与朗读", tabTranslate: "翻译", tabPage: "网页", tabHistory: "历史", tabSettings: "设置",
     from: "源语言", to: "目标语言", sourceText: "原文", sourcePlaceholder: "输入、粘贴，或在任意网页中选择文字…", paste: "粘贴", clear: "清空", translateNow: "立即翻译",
     translation: "译文", resultHint: "译文会显示在这里。", copy: "复制", listen: "朗读", save: "收藏", currentTab: "当前标签页",
     readingMode: "阅读模式", readingModeHint: "选择译文在网页中的呈现方式。", bilingual: "双语对照", bilingualHint: "原文 + 译文", translatedOnly: "仅看译文", translatedHint: "使用译文替换原文",
     pageReady: "可以翻译当前网页", pageReadyHint: "会跳过导航、代码、表单和隐藏内容。", translatePage: "翻译当前网页", restoreOriginal: "恢复原始网页",
-    pagePrivacy: "本地模式不会把网页文字发出设备；云端模式只会发送收集到的文字给你选择的服务商。", yourLibrary: "翻译资料库", recentTranslations: "最近翻译",
+    pagePrivacy: "本地翻译在设备内完成；云端翻译使用所选服务商，朗读使用 OpenAI 翻译中配置的 API 服务。", yourLibrary: "翻译资料库", recentTranslations: "最近翻译",
     clearAll: "全部清空", searchHistory: "搜索原文或译文", noHistory: "还没有翻译记录", noHistoryHint: "收藏或自动保存的翻译会出现在这里。",
     makeItYours: "把 Prism 调成顺手的样子", translationEngine: "翻译引擎", engineHint: "默认本地运行，云端服务始终由你明确选择。", endpoint: "接口地址", apiKey: "API 密钥", apiKeyOptional: "API 密钥（可选）", model: "模型",
     interfaceLanguage: "界面语言", interfaceLanguageHint: "跟随 Chrome 或手动选择", appearance: "外观", appearanceHint: "选择浅色、深色或跟随系统", system: "跟随系统", light: "浅色", dark: "深色",
@@ -96,7 +97,7 @@ const copy = {
     enterText: "请先输入或选择文字。", translating: "正在翻译…", downloading: "正在下载本地翻译语言包…", pageTranslating: "正在翻译网页", pageDone: "网页翻译完成", pageRestored: "已恢复原始网页",
     refreshPage: "请刷新一次当前标签页，让 Prism 与网页建立连接。Chrome 设置页、扩展商店和新标签页无法翻译。", restrictedPage: "Chrome 不允许扩展访问这个系统页面。", noPageText: "没有找到可翻译的网页文字。", segments: "个片段", localUnavailable: "本地 AI 不可用",
     historyCleared: "历史记录已清空", openPage: "请先打开一个网页", providerPermissionDenied: "没有获得该地址的访问权限，暂时无法连接这个服务商。",
-    listenWord: "单词发音", noPronunciation: "离线词典暂未收录", pronunciationUnavailable: "音标词典暂不可用",
+    listenWord: "朗读单词", noPronunciation: "离线词典暂未收录", pronunciationUnavailable: "音标词典暂不可用",
     codexHint: "复用本机 Codex CLI 和登录状态。原文会发送到 Codex 配置的模型服务，并非离线推理。",
     codexConnect: "检测连接并刷新模型", reasoningEffort: "推理强度", effortHint: "翻译通常选择较低强度，响应更快。",
     codexSetup: "首次连接设置", codexSetupHint: "在 Prism 项目目录中执行一次下面的命令，再检测连接。需要 Node.js 和已登录的 Codex CLI。",
@@ -168,6 +169,10 @@ let lastPendingActionId;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const t = (key) => copy[uiLanguage]?.[key] || copy.en[key] || key;
+
+const reader = createReader({ getSettings: () => settings, sendToTab: sendToPanelTab, toast: showToast, showSettings: () => switchTab("settings"), getConnectionDraft: openaiSettingsDraft, chinese: () => uiLanguage === "zh" });
+Object.assign(copy.en, { readSource: "Read aloud", readAloud: "Read aloud", readHint: "Listen to selected text or the article body.", readPage: "Read article", readSelection: "Read selection", speechSettings: "OpenAI · Read aloud", speechHint: "Uses the API connection configured for OpenAI translation. AI-generated voice.", speechKeyHint: "Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.", voice: "Voice", speechRate: "Playback speed", voicePreview: "Preview voice", previewHint: "Preview uses these choices and incurs API usage. Save settings to use them for reading.", stopReading: "Stop", previousPart: "Previous", nextPart: "Next", readerNote: "AI-generated voice · Keep this panel open while listening." });
+Object.assign(copy.zh, { readSource: "朗读原文", readAloud: "朗读", readHint: "朗读选中的段落，或按顺序朗读文章正文。", readPage: "朗读整篇文章", readSelection: "朗读选中段落", speechSettings: "OpenAI · 朗读设置", speechHint: "共用翻译中的 OpenAI API 配置，声音由 AI 合成。", speechKeyHint: "接口地址和 API Key 与 OpenAI 翻译共用，这里只需选择朗读模型、音色和速度。", voice: "音色", speechRate: "播放速度", voicePreview: "试听当前音色", previewHint: "试听使用当前选项并产生 API 用量；保存设置后用于网页朗读。", stopReading: "停止", previousPart: "上一段", nextPart: "下一段", readerNote: "AI 合成语音 · 朗读时请保持侧边栏打开。" });
 
 function translationError(error) {
   if (error.name === "AbortError") return t("translationTimedOut");
@@ -268,6 +273,7 @@ function updateProviderConfig() {
 }
 
 function fillSettingsForm(values = settings) {
+  reader.fill(values);
   selectedProvider = values.provider;
   $("#openai-connection").value = values.openaiConnection;
   $("#openai-endpoint").value = values.openaiEndpoint;
@@ -826,6 +832,7 @@ async function requestProviderPermission(provider, draft) {
 
 function settingsDraft() {
   return {
+    ...reader.draft(),
     ...kimiSettingsDraft(),
     ...openaiSettingsDraft(),
     provider: selectedProvider,
@@ -881,7 +888,10 @@ async function processPendingAction(value) {
   if (!action || action.tabId !== ownerTabId || !action.id || action.id === lastPendingActionId || Date.now() - action.createdAt > 30_000) return;
   lastPendingActionId = action.id;
   await chrome.storage.session.remove(key);
-  if (action.type === "selection") {
+  if (action.type === "read-selection" || action.type === "read-page") {
+    switchTab("page");
+    reader.start(action.type === "read-page" ? "page" : "text", action.text);
+  } else if (action.type === "selection") {
     switchTab("translate");
     if (action.text) {
       resetInputResult();
@@ -920,6 +930,8 @@ async function copyText(text) {
 }
 
 function wireEvents() {
+  reader.wire();
+  chrome.tabs.onUpdated.addListener((tabId, change) => { if (tabId === ownerTabId && (change.status === "loading" || change.url)) reader.stop(); });
   $('[data-panel="settings"]').addEventListener("input", updateSettingsSaveBar);
   $('[data-panel="settings"]').addEventListener("change", updateSettingsSaveBar);
   $("#openai-connection").addEventListener("change", updateOpenAiConnection);
@@ -938,8 +950,7 @@ function wireEvents() {
   $("#copy-codex-command").addEventListener("click", () => copyText($("#codex-install-command").textContent));
   $("#speak-source").addEventListener("click", () => {
     if (!pronunciationWord) return;
-    const utterance = new SpeechSynthesisUtterance(pronunciationWord); utterance.lang = "en-US";
-    speechSynthesis.cancel(); speechSynthesis.speak(utterance);
+    reader.start("text", pronunciationWord);
   });
   $$(".tab").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
   $("#provider-status").addEventListener("click", () => switchTab("settings"));
@@ -962,7 +973,7 @@ function wireEvents() {
   });
   $("#translate-button").addEventListener("click", translateInput);
   $("#copy-result").addEventListener("click", () => { if (lastResult) copyText(lastResult.translatedText); });
-  $("#speak-result").addEventListener("click", () => { if (lastResult) { const speech = new SpeechSynthesisUtterance(lastResult.translatedText); speech.lang = lastResult.targetLanguage; speechSynthesis.cancel(); speechSynthesis.speak(speech); } });
+  $("#speak-result").addEventListener("click", () => { if (lastResult) reader.start("text", lastResult.translatedText); });
   $("#favorite-result").addEventListener("click", async () => { if (lastResult) { try { await addHistory({ ...lastResult, favorite: true }); history = await getHistory(); showToast(t("savedFavorite")); } catch { showToast(t("historyFailed")); } } });
   $("#translate-page").addEventListener("click", translatePage);
   $("#restore-page").addEventListener("click", restorePage);

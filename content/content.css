@@ -26,3 +26,5 @@
   padding-inline-start: 0.45em !important;
   border-inline-start: 1px solid color-mix(in srgb, currentColor 28%, transparent) !important;
 }
+
+::highlight(prism-reading) { background-color: #ffe08a; color: #181818; }

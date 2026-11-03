@@ -1,3 +1,4 @@
+import { SPEECH_MODELS, speechVoices } from "./speech.js";
 export const STORAGE_KEYS = Object.freeze({
   settings: "prismSettings",
   secrets: "prismSecrets",
@@ -14,6 +15,9 @@ export const OPENAI_REASONING_EFFORTS = Object.freeze([
 ]);
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  speechModel: "gpt-audio-1.5",
+  speechVoice: "alloy",
+  speechRate: 1,
   provider: "chrome",
   sourceLanguage: "auto",
   targetLanguage: "zh",
@@ -96,6 +100,18 @@ export const MAX_SINGLE_TEXT_LENGTH = 12_000;
 
 export function normalizeSettings(value = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...value };
+  if (!SPEECH_MODELS.includes(merged.speechModel)) merged.speechModel = DEFAULT_SETTINGS.speechModel;
+  if (!speechVoices(merged.speechModel).includes(merged.speechVoice)) merged.speechVoice = speechVoices(merged.speechModel)[0];
+  if (![0.75, 1, 1.25, 1.5, 2].includes(Number(merged.speechRate))) merged.speechRate = 1;
+  else merged.speechRate = Number(merged.speechRate);
+  // Consolidate the former official-only speech key without overriding the
+  // existing translation credential or sending an official key to a proxy.
+  if (!String(merged.openaiApiKey || "").trim() && value.speechApiKey) {
+    try {
+      if (new URL(merged.openaiEndpoint).origin === "https://api.openai.com") merged.openaiApiKey = value.speechApiKey;
+    } catch { /* Keep invalid endpoint handling in the API settings. */ }
+  }
+  delete merged.speechApiKey;
   // Before 1.4, "codex" was CLI-only and "openai" was API-only.
   if (value.provider === "codex") {
     merged.provider = "openai";

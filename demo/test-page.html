@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prism Translate Test Page</title>
+  <title>Prism Test Page</title>
   <style>
     body{max-width:760px;margin:60px auto;padding:0 24px;color:#23243a;background:#f7f8fc;font:17px/1.7 -apple-system,sans-serif}article{padding:40px;border:1px solid #e6e7ef;border-radius:26px;background:white;box-shadow:0 24px 70px #4d4f7814}h1{font-size:38px;line-height:1.1}code{padding:3px 6px;border-radius:6px;background:#f0effa}.hint{color:#725bf2;font-weight:700}
   </style>
 </head>
 <body>
   <article>
-    <p class="hint">Select any sentence below to test the floating Prism bubble.</p>
-    <h1>A tiny page for testing a powerful translator</h1>
-    <p>Double-click a word to check pronunciation: <strong id="word-hello">hello</strong> · <strong id="word-world">world</strong> · <strong id="word-read">read</strong> · <strong id="word-unknown">zzzzprismunknown</strong>.</p>
-    <p>Language should feel like a window, not a wall. Prism Translate keeps the original context close while helping you understand unfamiliar writing.</p>
+    <p class="hint">Select a sentence, then choose Translate or Read aloud in the Prism menu.</p>
+    <h1>Translate and listen with Prism</h1>
+    <p>Select a word and choose Translate to see its IPA; choose Read word to hear it: <strong id="word-hello">hello</strong> · <strong id="word-world">world</strong> · <strong id="word-read">read</strong> · <strong id="word-unknown">zzzzprismunknown</strong>.</p>
+    <p>Language should feel like a window, not a wall. Prism keeps the original context close while helping you understand unfamiliar writing.</p>
     <p>The bilingual page mode places each translation beside its source. The translation-only mode creates a quieter reading experience and can be reversed at any time.</p>
+    <p>To listen to the article, open the side panel and choose Read article. Reading uses the model and voice you saved in OpenAI read-aloud settings, with the same API connection as OpenAI translation.</p>
     <h2>Content that should be skipped</h2>
     <pre><code>const greeting = "This code block should remain untouched";</code></pre>
     <label>Form input <input value="This value should not be translated"></label>

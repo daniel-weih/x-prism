@@ -1,12 +1,19 @@
 import { configureSidePanels } from "./side-panel.js";
 
 export const CONTEXT_SELECTION = "prism-translate-selection";
+export const CONTEXT_READ_SELECTION = "prism-read-selection";
+export const CONTEXT_READ_PAGE = "prism-read-page";
 export const CONTEXT_PAGE = "prism-translate-page";
 
-const MENUS = [
-  { id: CONTEXT_SELECTION, title: "Translate selection with Prism", contexts: ["selection"] },
-  { id: CONTEXT_PAGE, title: "Translate this page with Prism", contexts: ["page"] }
-];
+function menusForLanguage(language) {
+  const zh = language.toLowerCase().startsWith("zh");
+  return [
+    { id: CONTEXT_READ_SELECTION, title: zh ? "朗读选中段落" : "Read selection", contexts: ["selection"] },
+    { id: CONTEXT_READ_PAGE, title: zh ? "朗读整篇文章" : "Read article", contexts: ["page"] },
+    { id: CONTEXT_SELECTION, title: zh ? "翻译选中文本" : "Translate selection", contexts: ["selection"] },
+    { id: CONTEXT_PAGE, title: zh ? "翻译当前网页" : "Translate page", contexts: ["page"] }
+  ];
+}
 
 function menuCall(api, method, ...args) {
   return new Promise((resolve, reject) => {
@@ -35,17 +42,31 @@ async function upsertMenu(api, { id, ...properties }) {
   }
 }
 
-export function createExtensionConfigurator(api, ensureDefaults) {
+export function createExtensionConfigurator(api, ensureDefaults, readSettings = async () => ({})) {
   let pending;
-  return function configureExtension() {
+  let menuQueue = Promise.resolve();
+  function refreshMenus() {
+    const update = menuQueue.then(async () => {
+      const settings = await readSettings();
+      const language = ["zh", "en"].includes(settings.uiLanguage)
+        ? settings.uiLanguage : api.i18n?.getUILanguage() || "en";
+      // Update persistent IDs so changing the UI language also changes menus.
+      for (const menu of menusForLanguage(language)) await upsertMenu(api, menu);
+    });
+    menuQueue = update.catch(() => {});
+    return update;
+  }
+  function configureExtension() {
     if (pending) return pending;
     pending = (async () => {
       await ensureDefaults();
       await configureSidePanels(api);
       // Existing menus persist across worker restarts. Update in place instead
       // of racing removeAll/create sequences from onInstalled and onStartup.
-      for (const menu of MENUS) await upsertMenu(api, menu);
+      await refreshMenus();
     })().finally(() => { pending = undefined; });
     return pending;
-  };
+  }
+  configureExtension.refreshMenus = refreshMenus;
+  return configureExtension;
 }

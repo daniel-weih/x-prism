@@ -1,6 +1,6 @@
-# Prism Translate privacy notes
+# Prism privacy notes
 
-Prism is local-first and does not include analytics, advertising, telemetry, or bundled credentials.
+Prism provides web translation and AI read aloud. Translation can run locally with Chrome Local AI; read aloud uses the configured OpenAI API service. Prism does not include analytics, advertising, telemetry, or bundled credentials.
 
 ## What stays on the device
 
@@ -9,11 +9,11 @@ Prism is local-first and does not include analytics, advertising, telemetry, or 
 - Translation history is stored in `chrome.storage.local` in the current Chrome profile.
 - Provider API keys are stored separately in `chrome.storage.local`; Prism deliberately excludes them from Chrome Sync.
 - Non-sensitive preferences may use `chrome.storage.sync` so the interface behaves consistently across the user's Chrome profiles.
-- English pronunciation lookup reads the bundled US English IPA dictionary. It never sends a lookup to a dictionary service. The word-audio button uses browser speech synthesis and the system's available voices.
+- English pronunciation lookup reads the bundled US English IPA dictionary. It never sends a lookup to a dictionary service. This applies to the displayed phonetic notation only; word audio uses the OpenAI read-aloud service described below.
 
 ## When text leaves the device
 
-Text is sent over the network only after the user selects a network-backed provider and starts a translation. The destination is the selected provider: MyMemory, an OpenAI-compatible endpoint, Kimi's selected API region, or the service configured in the user's local Codex / Kimi CLI. Prism sends the text needed for that translation; it does not send browsing history or page cookies. Detecting Kimi API models sends the API key to the selected API region without any page text.
+For translation, text is sent over the network after the user selects a network-backed provider and starts a translation. The destination is the selected provider: MyMemory, an OpenAI-compatible endpoint, Kimi's selected API region, or the service configured in the user's local Codex / Kimi CLI. Prism sends the text needed for that translation; it does not send browsing history or page cookies. Detecting Kimi API models sends the API key to the selected API region without any page text. Starting read aloud, word pronunciation, or a voice preview also makes a network request, independently of the translation provider; see OpenAI read aloud below.
 
 ## OpenAI connections
 
@@ -35,9 +35,19 @@ Kimi offers two independent modes. **Local CLI** uses the installed Kimi Code lo
 
 **Open Platform API** sends translation text and the user's API key only to `https://api.moonshot.cn/v1` or `https://api.moonshot.ai/v1`, selected in Settings. Prism requests host access for that exact origin and rejects redirects. The key is kept in local extension storage and excluded from sync. CLI and API model settings are separate; neither mode reuses the other's credentials. No Kimi service is used unless the user chooses that mode and detects models or translates.
 
+## OpenAI read aloud
+
+Read aloud shares the endpoint and API key configured for OpenAI translation. Starting reading sends the requested word, selected passage, input text, translation, or extracted article body to that service; preview sends a fixed sample sentence. This also applies when the translation engine is Chrome Local AI. Speech is AI-generated and API usage is billed by the configured service.
+
+The shared OpenAI API key stays in `chrome.storage.local`, excluded from sync. There is no separate reading credential. Chat audio uses the exact configured translation endpoint. Realtime is currently supported only with the official OpenAI endpoint; custom-service credentials are never forwarded to OpenAI. No key is passed to page scripts, included in a URL, or stored with audio. Chat audio requests use `store: false`, omit cookies and reject redirects. Realtime uses a short-lived client secret for WebSocket authentication. OpenAI's retention policies still apply.
+
+For every speech chunk, Prism checks the model-reported audio transcript against the source before playback and rejects missing or mismatched transcripts. Paragraph checks ignore differences in casing, whitespace and punctuation; spoken rewrites of numbers or symbols can still be rejected. This is not independent audio recognition; no additional transcription service is called. Realtime requests carry explicit reading instructions and only the current script, without conversation history.
+
+Each synthesis request contains text from one source paragraph. Long paragraphs can be split into multiple clips; adjacent paragraphs are not combined. Audio is held only in side-panel memory, targeting an estimated 25-second playback window with at most two synthesis requests in flight and at most four future chunks plus the current chunk retained. Pausing prevents new prefetch requests while allowing already-started requests to complete. Reading text and audio are not added to translation history or persistent caches. Stop, page navigation and closing the panel release playback resources and cancel pending work; requests already processed by OpenAI may still incur usage.
+
 ## Page access
 
-The content script runs on ordinary HTTP(S) pages to provide selection and page translation. It skips passwords and other form controls, editable content, scripts, styles, code blocks, canvases, SVG, and hidden text. Chrome internal pages and the Chrome Web Store remain inaccessible to extensions.
+The content script runs on ordinary HTTP(S) pages to provide the selection menu, translation, and text extraction for read aloud. It skips passwords and other form controls, editable content, scripts, styles, code blocks, canvases, SVG, and hidden text. Chrome internal pages and the Chrome Web Store remain inaccessible to extensions.
 
 If an ordinary page was already open when Prism was installed or reloaded, Chrome may not yet have attached the content script. After the user opens Prism for that tab, Prism uses the temporary `activeTab` grant and the `scripting` API to attach only its bundled content script to that tab and retries once. Prism does not request the broad `tabs` permission or use this recovery path to read browsing history.
 

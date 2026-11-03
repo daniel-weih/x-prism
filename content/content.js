@@ -54,7 +54,7 @@
 
   const host = document.createElement("div");
   host.id = "prism-translate-host";
-  host.dataset.prismVersion = "1.4.0";
+  host.dataset.prismVersion = "1.5.0";
   const shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = `
     <style>
@@ -62,8 +62,17 @@
       * { box-sizing:border-box; }
       button { font:inherit; }
       button:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
-      .bubble { position:fixed; display:none; align-items:center; gap:7px; pointer-events:auto; height:36px; padding:0 12px 0 8px; border:1px solid #ffffff66; border-radius:8px; color:#fff; cursor:pointer; font:600 12px/1 -apple-system,sans-serif; background:#242424; box-shadow:0 3px 12px #0003; }
-      .bubble:hover { background:#3a3a3a; }
+      .bubble { --menu-bg:#fff; --menu-text:#30343b; --menu-muted:#737983; --menu-border:#e3e5e8; --menu-hover:#f1f3f5; --menu-active:#e8ebef; --menu-shadow:0 2px 4px #18202d08,0 6px 20px #18202d12;
+        position:fixed; display:none; align-items:center; gap:2px; max-width:calc(100vw - 24px); pointer-events:auto; padding:3px; border:1px solid var(--menu-border); border-radius:8px; color:var(--menu-text); font:500 12px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--menu-bg); box-shadow:var(--menu-shadow); color-scheme:light; }
+      .bubble.dark { --menu-bg:#292b2f; --menu-text:#e8eaed; --menu-muted:#a8adb7; --menu-border:#41444a; --menu-hover:#383b41; --menu-active:#454951; --menu-shadow:0 2px 4px #0002,0 6px 20px #0003; color-scheme:dark; }
+      .bubble-brand { display:grid; place-items:center; flex-shrink:0; width:24px; height:28px; margin-left:3px; color:var(--menu-text); }
+      .bubble-brand svg { display:block; width:18px; height:18px; }
+      .bubble-action { display:flex; align-items:center; justify-content:center; gap:6px; min-width:0; min-height:28px; padding:0 9px; border:0; border-radius:5px; background:transparent; color:inherit; cursor:pointer; white-space:nowrap; transition:background-color .12s; }
+      .bubble-action:hover { background:var(--menu-hover); }
+      .bubble-action:active { background:var(--menu-active); }
+      .bubble-action:focus-visible { outline:2px solid var(--menu-muted); outline-offset:-2px; }
+      .bubble-action svg { width:14px; height:14px; flex-shrink:0; color:var(--menu-muted); }
+      .bubble-divider { width:1px; height:12px; margin:0 1px; background:var(--menu-border); flex-shrink:0; }
       .gem { width:22px; height:22px; display:grid; place-items:center; }
       .gem svg,.brand svg { width:22px; height:22px; display:block; }
       .card { --surface:#fff; --subtle:#f6f6f6; --stroke:#e2e2e2; --text:#242424; --muted:#666; --inverse:#fff; color-scheme:light;
@@ -93,10 +102,15 @@
       @keyframes spin { to { transform:rotate(360deg); } }
       @media(prefers-reduced-motion:reduce) { .result.loading::after { animation:none; } }
     </style>
-    <button class="bubble" type="button" aria-label="Translate selection"><span class="gem">${logo("bubble")}</span><span>Translate</span></button>
+    <div class="bubble" role="toolbar" aria-label="Selected text actions">
+      <span class="bubble-brand" role="img" aria-label="Prism" title="Prism">${logo("bubble")}</span>
+      <button class="bubble-action bubble-translate" type="button"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h12M9 3v2M5 5c0 5 4 8 8 10M13 5c0 5-4 8-9 10M14 21l4-10 4 10M16 17h4"/></svg><span>Translate</span></button>
+      <span class="bubble-divider" aria-hidden="true"></span>
+      <button class="bubble-action bubble-read" type="button"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg><span>Read aloud</span></button>
+    </div>
     <section class="card" role="dialog" aria-label="Prism translation">
       <div class="head"><div class="brand">${logo("card")} Prism <span class="provider"></span></div><button class="close" aria-label="Close">×</button></div>
-      <div class="source"></div><div class="pronunciation" hidden aria-live="polite"><span></span><button class="speak-source" type="button">单词发音</button></div><div class="result"></div>
+      <div class="source"></div><div class="pronunciation" hidden aria-live="polite"><span></span><button class="speak-source" type="button">朗读单词</button></div><div class="result"></div>
       <div class="recovery" hidden><button class="reload-page" type="button">刷新当前网页</button></div>
       <div class="foot"><span class="meta"></span><div class="tools"><button class="tool copy" title="Copy">Copy</button><button class="tool speak" title="Speak"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg></button><button class="tool panel" title="Open side panel">↗</button></div></div>
     </section>
@@ -122,8 +136,13 @@
   const label = (zh, en) => chineseUi() ? zh : en;
 
   function localizeControls() {
-    bubble.querySelector("span:last-child").textContent = label("翻译", "Translate");
-    bubble.setAttribute("aria-label", label("翻译选中文字", "Translate selection"));
+    bubble.setAttribute("aria-label", label("选中文字操作", "Selected text actions"));
+    shadow.querySelector(".bubble-translate span").textContent = label("翻译", "Translate");
+    shadow.querySelector(".bubble-read span").textContent = label("朗读", "Read aloud");
+    for (const [selector, zh, en] of [[".bubble-translate", "翻译选中文字", "Translate selection"], [".bubble-read", "朗读选中文字", "Read selected text"]]) {
+      const button = shadow.querySelector(selector);
+      button.title = label(zh, en); button.setAttribute("aria-label", button.title);
+    }
     shadow.querySelector(".copy").textContent = label("复制", "Copy");
     for (const [selector, zh, en] of [[".close", "关闭", "Close"], [".copy", "复制译文", "Copy translation"], [".speak", "朗读译文", "Read translation"], [".panel", "打开侧栏", "Open side panel"]]) {
       const node = shadow.querySelector(selector);
@@ -154,6 +173,7 @@
   function dispose() {
     if (disposed) return;
     disposed = true;
+    CSS.highlights?.delete("prism-reading");
     selectionRequest++;
     clearTimeout(hideTimer);
     clearTimeout(selectionTimer);
@@ -205,6 +225,7 @@
       settings = { ...DEFAULTS, ...(changes.prismSettings.newValue || {}) };
       pageMode = settings.pageMode;
       localizeControls();
+      bubble.classList.toggle("dark", selectionMenuDark());
       if (!settings.showSelectionBubble) hideBubble();
     }
   }
@@ -234,9 +255,9 @@
   }
 
   function place(element, rect, preferredBelow = true) {
-    const width = element === bubble ? 112 : Math.min(390, innerWidth - 24);
-    const height = element === bubble ? 38 : (element.offsetHeight || 280);
-    const left = Math.min(innerWidth - width - 12, Math.max(12, rect.left + rect.width / 2 - width / 2));
+    const width = element === bubble ? element.offsetWidth : Math.min(390, innerWidth - 24);
+    const height = element.offsetHeight || 280;
+    const left = Math.max(12, Math.min(innerWidth - width - 12, rect.left + rect.width / 2 - width / 2));
     let top = preferredBelow ? rect.bottom + 9 : rect.top - height - 9;
     if (top + height > innerHeight - 10) top = Math.max(10, rect.top - height - 9);
     element.style.left = `${left}px`;
@@ -244,11 +265,26 @@
   }
 
   function hideBubble() { bubble.style.display = "none"; }
+  function selectionMenuDark() {
+    if (settings.theme === "dark" || settings.theme === "light") return settings.theme === "dark";
+    // Match the selected passage's surface, which may differ from the OS theme.
+    const anchor = document.getSelection()?.anchorNode;
+    for (let element = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement; element; element = element.parentElement) {
+      const background = getComputedStyle(element).backgroundColor;
+      if (!background.startsWith("rgb")) continue;
+      const values = background.match(/[\d.]+/g)?.map(Number);
+      if (values?.length >= 3 && (values[3] ?? 1) >= 0.9) return values[0] * .2126 + values[1] * .7152 + values[2] * .0722 < 140;
+    }
+    const scheme = getComputedStyle(document.documentElement).colorScheme;
+    return scheme.includes("dark") && (!scheme.includes("light") || darkMode());
+  }
+
   function showBubble(details) {
     lastSelection = details.text;
     lastSelectionRect = details.rect;
-    place(bubble, details.rect);
+    bubble.classList.toggle("dark", selectionMenuDark());
     bubble.style.display = "flex";
+    place(bubble, details.rect);
   }
 
   document.addEventListener("mouseup", (event) => {
@@ -370,7 +406,8 @@
         const chinese = chineseUi();
         pronunciationNode.querySelector("span").textContent = value ? `${value.label} ${value.ipa}` : (chinese ? (response?.ok ? "离线词典暂未收录" : "音标词典暂不可用") : (response?.ok ? "Not in offline dictionary" : "Dictionary unavailable"));
         pronunciationNode.title = value?.source || "";
-        pronunciationNode.querySelector("button").textContent = chinese ? "单词发音" : "Listen to word";
+        pronunciationNode.querySelector("button").textContent = chinese ? "朗读单词" : "Read word";
+        pronunciationNode.querySelector("button").title = chinese ? "使用已设置的模型和音色，在侧栏朗读原单词" : "Read the original word in the side panel with your selected model and voice";
         pronunciationNode.hidden = false;
         if (rect) place(card, rect);
       }).catch((error) => { if (request === selectionRequest && contextLost(error)) showReconnect(text, rect); });
@@ -417,12 +454,27 @@
   }
 
   function listen(node, type, handler) { node.addEventListener(type, handler, { signal: listeners.signal }); }
-  listen(bubble, "click", () => translateSelection());
-  listen(shadow.querySelector(".reload-page"), "click", () => location.reload());
-  listen(shadow.querySelector(".speak-source"), "click", () => {
-    const utterance = new SpeechSynthesisUtterance(card.dataset.source || "");
-    utterance.lang = "en-US"; speechSynthesis.cancel(); speechSynthesis.speak(utterance);
+  function openReader(text) {
+    if (!text) return;
+    // Invoke from the click handler so sidePanel.open retains user activation.
+    sendRuntimeMessage({ type: "PRISM_OPEN_PANEL", action: { type: "read-selection", text } })
+      .then(response => { if (!response?.ok) throw new Error(response?.error || label("无法打开朗读侧栏", "Unable to open reading panel")); })
+      .catch(error => { if (contextLost(error)) showReconnect(text); else showToast(error.message); });
+  }
+  // Keep the webpage selection intact while pressing either action.
+  listen(bubble, "mousedown", event => event.preventDefault());
+  listen(shadow.querySelector(".bubble-translate"), "click", () => translateSelection(lastSelection, lastSelectionRect));
+  listen(shadow.querySelector(".bubble-read"), "click", () => {
+    const text = lastSelection;
+    if (!text) return;
+    hideBubble(); card.style.display = "none"; selectionRequest++;
+    openReader(text);
   });
+  listen(document, "keydown", event => { if (event.key === "Escape") { hideBubble(); card.style.display = "none"; selectionRequest++; } });
+  document.addEventListener("scroll", hideBubble, { capture: true, passive: true, signal: listeners.signal });
+  listen(window, "resize", hideBubble);
+  listen(shadow.querySelector(".reload-page"), "click", () => location.reload());
+  listen(shadow.querySelector(".speak-source"), "click", () => openReader(card.dataset.source));
   listen(shadow.querySelector(".close"), "click", () => { card.style.display = "none"; selectionRequest++; });
   listen(shadow.querySelector(".copy"), "click", async () => {
     if (!card.dataset.translation) return;
@@ -431,11 +483,7 @@
       showToast(label("译文已复制", "Translation copied"));
     } catch { showToast(label("无法访问剪贴板，请手动复制。", "Clipboard unavailable. Please copy manually.")); }
   });
-  listen(shadow.querySelector(".speak"), "click", () => {
-    if (!card.dataset.translation) return;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance(card.dataset.translation));
-  });
+  listen(shadow.querySelector(".speak"), "click", () => openReader(card.dataset.translation));
   listen(shadow.querySelector(".panel"), "click", () => {
     sendRuntimeMessage({ type: "PRISM_OPEN_PANEL", action: { type: "selection", text: card.dataset.source || lastSelection } })
       .catch((error) => { if (contextLost(error)) showReconnect(card.dataset.source || lastSelection); else showToast(error.message); });
@@ -560,8 +608,64 @@
     } finally { pageTranslationPending = false; }
   }
 
+  let readingSnapshot = null;
+  let readingUrl = "";
+  const readingNodes = new Map();
+  function collectReading(selectionOnly) {
+    readingNodes.clear();
+    readingSnapshot = crypto.randomUUID(); readingUrl = location.href;
+    CSS.highlights?.delete("prism-reading");
+    if (selectionOnly) {
+      const selection = getSelection();
+      const text = selection?.toString().trim() || lastSelection;
+      if (selection?.rangeCount) readingNodes.set(0, selection.getRangeAt(0).cloneRange());
+      return { ok: true, paragraphs: text ? [{ id: 0, text }] : [], snapshot: readingSnapshot, url: readingUrl };
+    }
+    const visible = element => {
+      for (let e = element; e; e = e.parentElement) {
+        const style = getComputedStyle(e);
+        if (e.hidden || e.getAttribute("aria-hidden") === "true" || style.display === "none" || ["hidden", "collapse"].includes(style.visibility) || style.opacity === "0" || style.contentVisibility === "hidden") return false;
+      }
+      return true;
+    };
+    const roots = [...document.querySelectorAll("article,main,[role=main]")].filter(visible);
+    const root = roots.sort((a, b) => b.textContent.length - a.textContent.length)[0] || document.body;
+    const originals = new Map([...pageRecords.values()].filter(r => r.node.isConnected && r.node.nodeValue === r.rendered).map(r => [r.node, r.original]));
+    const paragraphs = []; let block, current, length = 0;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode, parent = node.parentElement;
+      if (node.nodeType === Node.ELEMENT_NODE) { if (node.tagName === "BR" && current && visible(node)) current.text += "\n"; continue; }
+      if (!parent || parent.isContentEditable || parent.closest("script,style,noscript,code,pre,svg,canvas,input,textarea,select,button,nav,aside,footer,[role=navigation],[role=banner],[role=dialog],[role=contentinfo],[inert],#prism-translate-host,.prism-page-translation") || !visible(parent)) continue;
+      const text = originals.get(node) ?? node.nodeValue;
+      if (!text?.trim()) continue;
+      const nextBlock = parent.closest("p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,figcaption,div,section,article,main") || parent;
+      if (nextBlock !== block) {
+        block = nextBlock; current = { id: paragraphs.length, text: "" }; paragraphs.push(current); readingNodes.set(current.id, block);
+      }
+      current.text += text; length += text.length;
+      if (length > 240_000) return { ok: false, error: label("文章过长，请选择部分段落朗读。", "Article too long. Select a smaller section.") };
+    }
+    return { ok: true, paragraphs, snapshot: readingSnapshot, url: readingUrl };
+  }
+  function highlightReading(message) {
+    if (message.snapshot !== readingSnapshot || readingUrl !== location.href) return;
+    CSS.highlights?.delete("prism-reading");
+    if (!CSS.highlights || typeof Highlight === "undefined") return;
+    const ranges = [];
+    for (const id of new Set(Array.isArray(message.ids) ? message.ids : [message.id])) {
+      const node = readingNodes.get(id);
+      if (!node) continue;
+      if (node instanceof Range) { if (node.commonAncestorContainer.isConnected) ranges.push(node); }
+      else if (node.isConnected) { const range = document.createRange(); range.selectNodeContents(node); ranges.push(range); }
+    }
+    if (ranges.length) CSS.highlights.set("prism-reading", new Highlight(...ranges));
+  }
+
   function onRuntimeMessage(message, sender, sendResponse) {
     if (disposed) return false;
+    if (message?.type === "PRISM_READING_COLLECT") { sendResponse(collectReading(message.selection)); return false; }
+    if (message?.type === "PRISM_READING_HIGHLIGHT") { highlightReading(message); sendResponse({ ok: true }); return false; }
     if (message?.type === "PRISM_TRANSLATE_SELECTION") {
       const details = selectionDetails();
       translateSelection(details?.text || lastSelection, details?.rect);

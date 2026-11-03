@@ -85,7 +85,98 @@ function contentMessage(message) {
   return response;
 }
 
+async function showSelectionMenu(node = $("#word")) {
+  const range = document.createRange(); range.selectNodeContents(node);
+  const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+  node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  await waitFor(() => view(".bubble")?.style.display === "flex");
+}
+
 const cases = [
+  ["单词发音使用共享朗读链路，仅发送当前原词并显示打开失败", async () => {
+    const messages = [];
+    let fail = false;
+    await fresh({ send(message) {
+      if (message.type === "PRISM_OPEN_PANEL") {
+        messages.push(message);
+        return Promise.resolve(fail ? { ok: false, error: "Reader unavailable" } : { ok: true });
+      }
+    } });
+    await expectTranslation();
+    await waitFor(() => !view(".pronunciation").hidden);
+    view(".speak-source").click();
+    check(messages[0]?.action.text === "hello" && messages[0]?.action.type === "read-selection", "必须朗读原词，不能朗读音标或译文");
+    fail = true;
+    view(".speak-source").click();
+    await waitFor(() => view(".toast").textContent === "Reader unavailable");
+  }],
+  ["划词菜单可直接朗读选中文字，保持选区且不触发翻译", async () => {
+    const messages = [];
+    await fresh({ send(message) { messages.push(message); if (message.type === "PRISM_OPEN_PANEL") return Promise.resolve({ ok: true }); } });
+    await showSelectionMenu();
+    check(view(".bubble").getAttribute("role") === "toolbar", "应为带独立按钮的工具栏");
+    check(view(".bubble-translate").textContent.trim() === "翻译" && view(".bubble-read").textContent.trim() === "朗读", "显示翻译和朗读");
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    view(".bubble-read").dispatchEvent(down);check(down.defaultPrevented, "按下按钮应保留网页选区");
+    view(".bubble-read svg").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => messages.some(m => m.type === "PRISM_OPEN_PANEL"));
+    const action = messages.find(m => m.type === "PRISM_OPEN_PANEL").action;
+    check(action.type === "read-selection" && action.text === "hello", "应发送选中原文而非译文");
+    check(!messages.some(m => m.type === "PRISM_REMOTE_TRANSLATE"), "朗读不应先翻译");
+    check(getSelection().toString() === "hello" && view(".bubble").style.display === "none", "点击后保留选区并收起菜单");
+  }],
+  ["划词菜单翻译仍可用，朗读打开失败有可见提示", async () => {
+    await fresh();await showSelectionMenu();view(".bubble-translate").click();
+    await waitFor(() => view(".result").textContent === "你好");
+    await fresh({send(message){if(message.type === "PRISM_OPEN_PANEL")return Promise.resolve({ok:false,error:"Panel unavailable"});}});
+    await showSelectionMenu();view(".bubble-read").click();
+    await waitFor(() => view(".toast").textContent === "Panel unavailable");
+  }],
+  ["英文划词菜单在屏幕右下角不越界，Escape 可关闭", async () => {
+    await fresh({settings:{uiLanguage:"en"}});
+    const edge=document.createElement("p");edge.textContent="Selected text";edge.style.cssText="position:fixed;right:0;bottom:0;width:100px;margin:0;background:white";document.body.append(edge);
+    try {
+      await showSelectionMenu(edge);
+      check(view(".bubble-read").textContent.trim()==="Read aloud", "朗读按钮应随界面语言切换");
+      const box=view(".bubble").getBoundingClientRect();
+      check(box.left>=0 && box.right<=innerWidth && box.top>=0 && box.bottom<=innerHeight,"浮窗应按实际宽度限制在视口内");
+      document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+      check(view(".bubble").style.display==="none","Escape 应收起浮窗");
+    } finally {edge.remove();}
+  }],
+  ["正文朗读保留长段落与内联文字，过滤隐藏内容，并可高亮", async () => {
+    await fresh();
+    const article = document.createElement("article");
+    article.innerHTML = '<h1>Reader title</h1><nav>Navigation noise</nav><p>Hello <b>world</b>!</p><p hidden>Hidden noise</p><p>2026</p><div class="prism-page-translation">Duplicate translation</div><footer>Footer noise</footer>';
+    const long = document.createElement("p"); long.textContent = "长".repeat(2400); article.append(long); document.body.append(article);
+    try {
+      const r = contentMessage({ type: "PRISM_READING_COLLECT" });
+      check(r.ok && r.paragraphs.some(p=>p.text==='Hello world!'), "内联节点应合并为完整段落");
+      check(r.paragraphs.some(p=>p.text==='2026') && r.paragraphs.some(p=>p.text.length===2400), "数字和长段落不能遗漏");
+      check(!r.paragraphs.some(p=>/noise|Duplicate/.test(p.text)), "必须过滤导航、页脚、隐藏和重复译文");
+      contentMessage({type:"PRISM_READING_HIGHLIGHT",snapshot:r.snapshot,id:1});
+      check(CSS.highlights.has("prism-reading"), "当前段落应高亮");
+      contentMessage({type:"PRISM_READING_HIGHLIGHT",snapshot:r.snapshot,ids:[0,1,1]});
+      check(CSS.highlights.get("prism-reading").size === 2, "合并片段应高亮所有原段落并去重");
+      contentMessage({type:"PRISM_READING_HIGHLIGHT",snapshot:r.snapshot,ids:[]});
+      check(!CSS.highlights.has("prism-reading"), "停止合并片段应清除整组高亮");
+      contentMessage({type:"PRISM_READING_HIGHLIGHT",snapshot:r.snapshot,id:null});
+      check(!CSS.highlights.has("prism-reading"), "停止后移除高亮");
+    } finally { article.remove(); }
+  }],
+  ["朗读选择范围且不修改网页；替换模式读取保存的原文", async () => {
+    await fresh();
+    const article=document.createElement("article");article.innerHTML='<p>Original reader paragraph.</p>';document.body.append(article);
+    try {
+      const range=document.createRange();range.selectNodeContents(article.firstChild);getSelection().removeAllRanges();getSelection().addRange(range);
+      const selected=contentMessage({type:"PRISM_READING_COLLECT",selection:true});
+      check(selected.paragraphs[0].text==='Original reader paragraph.', "应读取选区");getSelection().removeAllRanges();
+      const snapshot=contentMessage({type:"PRISM_COLLECT_PAGE"});const item=snapshot.items.find(i=>i.text==='Original reader paragraph.');
+      contentMessage({type:"PRISM_APPLY_PAGE_BATCH",snapshotId:snapshot.snapshotId,mode:"translated",items:[{id:item.id,translation:"替换译文"}]});
+      const read=contentMessage({type:"PRISM_READING_COLLECT"});
+      check(read.paragraphs[0].text==='Original reader paragraph.' && article.textContent==='替换译文',"整篇朗读应读取原文且不恢复或修改页面");
+    } finally {contentMessage({type:"PRISM_RESTORE_PAGE"});article.remove();}
+  }],
   ["正常翻译与离线音标仍可显示", async () => {
     await fresh(); await expectTranslation();
     await waitFor(() => view(".pronunciation").textContent.includes("/həˈloʊ/"));

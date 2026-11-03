@@ -25,19 +25,33 @@ test('regression: overlapping old removeAll/create paths reproduce the reported 
 test('startup/install overlap shares initialization; repeats update persistent menus',async()=>{
  const m=mockChrome();const configure=createExtensionConfigurator(m.api,m.defaults);
  await Promise.all(Array.from({length:20},()=>configure()));
- assert.equal(m.calls.defaults,1);assert.equal(m.calls.creates,2);assert.equal(m.menus.size,2);assert.deepEqual(m.unchecked,[]);
- await configure();assert.equal(m.calls.creates,2);assert.equal(m.calls.defaults,2);assert.equal(m.menus.size,2);
+ assert.equal(m.calls.defaults,1);assert.equal(m.calls.creates,4);assert.equal(m.menus.size,4);assert.deepEqual(m.unchecked,[]);
+ await configure();assert.equal(m.calls.creates,4);assert.equal(m.calls.defaults,2);assert.equal(m.menus.size,4);
 });
 
 test('separate lifecycle instances converge when both observe a missing menu',async()=>{
  const m=mockChrome();
  await Promise.all([createExtensionConfigurator(m.api,m.defaults)(),createExtensionConfigurator(m.api,m.defaults)()]);
- assert.equal(m.menus.size,2);assert.deepEqual(m.unchecked,[]);
- assert.equal(m.menus.get(CONTEXT_SELECTION).title,'Translate selection with Prism');
+ assert.equal(m.menus.size,4);assert.deepEqual(m.unchecked,[]);
+ assert.equal(m.menus.get(CONTEXT_SELECTION).title,'Translate selection');
 });
 
 test('unexpected failures remain visible and a later event can retry',async()=>{
  const m=mockChrome();let fail=true;
  const configure=createExtensionConfigurator(m.api,async()=>{if(fail)throw new Error('storage unavailable');});
- await assert.rejects(configure(),/storage unavailable/);fail=false;await configure();assert.equal(m.menus.size,2);
+ await assert.rejects(configure(),/storage unavailable/);fail=false;await configure();assert.equal(m.menus.size,4);
+});
+
+test('menus follow the saved interface language and auto follows Chrome without duplicate IDs',async()=>{
+ const m=mockChrome();let uiLanguage='zh';m.api.i18n={getUILanguage:()=> 'zh-TW'};
+ const configure=createExtensionConfigurator(m.api,m.defaults,async()=>({uiLanguage}));
+ await configure();
+ assert.equal(m.menus.get('prism-read-selection').title,'朗读选中段落');
+ assert.equal(m.menus.get(CONTEXT_SELECTION).title,'翻译选中文本');
+ uiLanguage='en';await configure.refreshMenus();
+ assert.equal(m.menus.get('prism-read-page').title,'Read article');
+ assert.equal(m.menus.get(CONTEXT_PAGE).title,'Translate page');
+ uiLanguage='auto';await configure.refreshMenus();
+ assert.equal(m.menus.get(CONTEXT_PAGE).title,'翻译当前网页');
+ assert.equal(m.calls.creates,4);assert.deepEqual(m.unchecked,[]);
 });

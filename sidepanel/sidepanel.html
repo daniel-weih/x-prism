@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prism Translate</title>
+  <title>Prism</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="app-header">
       <div class="brand-lockup">
         <img class="brand-icon" src="../assets/icon.svg" width="40" height="40" alt="">
-        <div><h1>Prism</h1><p data-i18n="brandSubtitle">Translate without breaking your flow</p></div>
+        <div><h1>Prism</h1><p data-i18n="brandSubtitle">Web translation & read aloud</p></div>
       </div>
       <button class="status-pill" id="provider-status" type="button" title="Open settings" data-i18n-label="openSettings"><span></span><b>LOCAL</b></button>
     </header>
@@ -34,7 +34,7 @@
         <div class="composer-toolbar"><span class="eyebrow" data-i18n="sourceText">Source text</span><span id="character-count">0 / 12,000</span></div>
         <textarea data-i18n-label="sourceText" id="source-text" maxlength="12000" data-i18n-placeholder="sourcePlaceholder" placeholder="Type, paste, or select text on any page…"></textarea>
         <div class="composer-actions">
-          <div><button class="ghost-button" id="paste-text" type="button" data-i18n="paste">Paste</button><button class="ghost-button" id="clear-text" type="button" data-i18n="clear">Clear</button></div>
+          <div><button class="ghost-button" id="paste-text" type="button" data-i18n="paste">Paste</button><button class="ghost-button" id="read-source-text" type="button" data-i18n="readSource">Read aloud</button><button class="ghost-button" id="clear-text" type="button" data-i18n="clear">Clear</button></div>
           <span class="shortcut" id="input-shortcut">Ctrl ↵</span>
         </div>
       </section>
@@ -44,7 +44,7 @@
       <section class="result-card surface-card" id="result-card">
         <div class="result-header"><div><span class="eyebrow" data-i18n="translation">Translation</span><span class="language-route" id="language-route"></span></div><span class="provider-badge" id="result-provider">LOCAL</span></div>
         <div class="result-empty" id="result-empty"><img class="brand-icon empty-logo" src="../assets/icon.svg" width="36" height="36" alt=""><p data-i18n="resultHint">Your translation will appear here.</p></div>
-        <div class="pronunciation" id="pronunciation" hidden aria-live="polite"><span id="pronunciation-text"></span><button id="speak-source" type="button" data-i18n="listenWord">Listen to word</button></div>
+        <div class="pronunciation" id="pronunciation" hidden aria-live="polite"><span id="pronunciation-text"></span><button id="speak-source" type="button" data-i18n="listenWord">Read word</button></div>
         <p class="result-text" id="result-text" role="status"></p>
         <div class="download-progress" id="model-progress" hidden aria-hidden="true"><span></span></div>
         <div class="result-actions" id="result-actions">
@@ -61,6 +61,11 @@
         <div class="page-copy"><span class="eyebrow" data-i18n="currentTab">Current tab</span><h2 id="page-title">Open a web page</h2><p id="page-url">—</p></div>
       </section>
       <section class="section-card surface-card">
+        <div class="section-heading"><div><h3 data-i18n="readAloud">Read aloud</h3><p data-i18n="readHint">Listen to the selected text or the article body.</p></div></div>
+        <button class="primary-button" id="read-page" type="button" data-i18n="readPage">Read article</button>
+        <button class="secondary-button" id="read-selection" type="button" data-i18n="readSelection">Read selection</button>
+      </section>
+      <section class="section-card surface-card">
         <div class="section-heading"><div><h3 data-i18n="readingMode">Reading mode</h3><p data-i18n="readingModeHint">Choose how translated text appears.</p></div></div>
         <div class="segmented-control" id="page-mode">
           <button class="active" data-mode="bilingual" type="button"><b data-i18n="bilingual">Bilingual</b><small data-i18n="bilingualHint">Original + translation</small></button>
@@ -74,7 +79,7 @@
       </section>
       <button class="primary-button" id="translate-page" type="button"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16M14 9h3M14 13h3"/></svg><b data-i18n="translatePage">Translate this page</b><i>→</i></button>
       <button class="secondary-button" id="restore-page" type="button" disabled><span>↶</span><b data-i18n="restoreOriginal">Restore original page</b></button>
-      <p class="privacy-note"><span>◈</span><span data-i18n="pagePrivacy">Local mode keeps page text on this device. Cloud modes send only collected text to your chosen provider.</span></p>
+      <p class="privacy-note"><span>◈</span><span data-i18n="pagePrivacy">Local translation stays on this device. Cloud translation uses your chosen provider; read aloud uses the API service configured for OpenAI translation.</span></p>
     </section>
 
     <section class="panel" data-panel="history">
@@ -145,6 +150,15 @@
         </div>
       </section>
 
+      <section class="section-card surface-card speech-settings">
+        <div class="section-heading"><div><h3 data-i18n="speechSettings">OpenAI · Read aloud</h3><p data-i18n="speechHint">Uses the API connection configured for OpenAI translation. AI-generated voice.</p></div></div>
+        <p class="config-hint" data-i18n="speechKeyHint">Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.</p>
+        <label><span data-i18n="model">Model</span><select id="speech-model"></select></label>
+        <label><span data-i18n="voice">Voice</span><select id="speech-voice"></select></label>
+        <label><span data-i18n="speechRate">Playback speed</span><select id="speech-rate"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+        <button class="secondary-button" id="speech-preview" type="button" data-i18n="voicePreview">Preview voice</button>
+        <p class="config-hint" data-i18n="previewHint">Preview uses these choices and incurs API usage. Save settings to use them for reading.</p>
+      </section>
       <section class="section-card surface-card compact-settings">
         <label class="setting-row"><span><b data-i18n="interfaceLanguage">Interface language</b><small data-i18n="interfaceLanguageHint">Follow Chrome or choose manually</small></span><select id="ui-language"><option value="auto" data-i18n="auto">Follow Chrome</option><option value="en">English</option><option value="zh">中文</option></select></label>
         <label class="setting-row"><span><b data-i18n="appearance">Appearance</b><small data-i18n="appearanceHint">Choose a light or dark appearance</small></span><select id="theme"><option value="system" data-i18n="system">System</option><option value="light" data-i18n="light">Light</option><option value="dark" data-i18n="dark">Dark</option></select></label>
@@ -153,6 +167,13 @@
         <label class="setting-row range-row"><span><b data-i18n="pageLimit">Page segment limit</b><small id="page-limit-value">240</small></span><input id="page-limit" type="range" min="40" max="600" step="20"></label>
       </section>
       <p class="privacy-note"><span>◇</span><span data-i18n="keysPrivacy">API keys are kept in local extension storage and never synced by Prism.</span></p>
+    </section>
+    <section id="reader-player" class="surface-card reader-player" hidden aria-label="Read aloud player">
+      <div class="reader-heading"><b data-i18n="readAloud">Read aloud</b><button id="reader-stop" class="ghost-button" type="button" data-i18n="stopReading">Stop</button></div>
+      <p id="reader-status" role="status" aria-live="polite"></p>
+      <p id="reader-text"></p>
+      <div class="reader-controls"><button id="reader-prev" type="button" data-i18n="previousPart">Previous</button><button id="reader-toggle" type="button">Pause</button><button id="reader-next" type="button" data-i18n="nextPart">Next</button><select id="reader-rate" aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div>
+      <small data-i18n="readerNote">AI-generated voice · Keep this panel open while listening.</small>
     </section>
   </main>
   <div class="toast" id="toast" role="status"></div>

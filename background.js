@@ -5,18 +5,23 @@ import { requestCodex } from "./shared/codex.js";
 import { requestKimi } from "./shared/kimi.js";
 import { listKimiApiModels, translateKimiApi, kimiApiBase } from "./shared/kimi-api.js";
 import { listOpenAiApiModels, translateOpenAiApi, openaiApiOrigin } from "./shared/openai-api.js";
-import { CONTEXT_SELECTION, createExtensionConfigurator } from "./shared/extension-setup.js";
+import { CONTEXT_READ_SELECTION, CONTEXT_READ_PAGE, CONTEXT_SELECTION, createExtensionConfigurator } from "./shared/extension-setup.js";
 import { configureTabPanel, openTabPanel, pendingActionKey } from "./shared/side-panel.js";
 import { splitForMyMemory, myMemoryTranslation } from "./shared/mymemory.js";
 
 const providerIds = new Set(PROVIDERS.map(({ id }) => id));
 
-const configureExtension = createExtensionConfigurator(chrome, ensureDefaults);
+const configureExtension = createExtensionConfigurator(chrome, ensureDefaults, getSettings);
 const configureOnLifecycleEvent = () => {
   configureExtension().catch((error) => console.error("Prism initialization failed:", error.message));
 };
 chrome.runtime.onInstalled.addListener(configureOnLifecycleEvent);
 chrome.runtime.onStartup.addListener(configureOnLifecycleEvent);
+chrome.storage.onChanged?.addListener((changes, area) => {
+  const settings = changes.prismSettings;
+  if (area !== "sync" || !settings || settings.oldValue?.uiLanguage === settings.newValue?.uiLanguage) return;
+  configureExtension.refreshMenus().catch((error) => console.error("Prism menu update failed:", error.message));
+});
 
 function prepareTabPanel(tabId) {
   configureTabPanel(chrome, tabId).catch((error) => console.error("Prism side panel setup failed:", error.message));
@@ -33,7 +38,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 const openPanel = (tabId, action) => openTabPanel(chrome, tabId, action);
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  const action = info.menuItemId === CONTEXT_SELECTION
+  const action = info.menuItemId === CONTEXT_READ_SELECTION ? { type: "read-selection", text: info.selectionText || "" }
+    : info.menuItemId === CONTEXT_READ_PAGE ? { type: "read-page" }
+    : info.menuItemId === CONTEXT_SELECTION
     ? { type: "selection", text: info.selectionText || "" }
     : { type: "page" };
   openPanel(tab?.id, action).catch(() => {});

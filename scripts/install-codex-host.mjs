@@ -27,5 +27,5 @@ const manifestPath = join(folder, "com.prism_translate.codex.json");
 const previous = await readFile(manifestPath, "utf8").then(JSON.parse).catch(() => ({}));
 const allowedOrigins = new Set((previous.allowed_origins || []).filter((origin) => /^chrome-extension:\/\/[a-p]{32}\/$/.test(origin)));
 allowedOrigins.add(`chrome-extension://${id}/`);
-await writeFile(manifestPath, JSON.stringify({ name: "com.prism_translate.codex", description: "Prism Translate local Codex connector", path: launcher, type: "stdio", allowed_origins: [...allowedOrigins] }, null, 2) + "\n");
+await writeFile(manifestPath, JSON.stringify({ name: "com.prism_translate.codex", description: "Prism local Codex connector", path: launcher, type: "stdio", allowed_origins: [...allowedOrigins] }, null, 2) + "\n");
 console.log(`Installed for ${id}\n${version}\n${manifestPath}\nReload Prism in chrome://extensions, then use Settings → OpenAI → Local Codex CLI → Detect connection.`);
