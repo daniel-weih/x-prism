@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Prism is a Chrome extension for web translation and AI read aloud. Select text to translate or listen, view a page in two languages, or listen to an article while keeping the source in view. A compact selection menu and Chrome's native side panel keep these actions close to what you are reading.
+Prism is a Chrome extension for web translation and AI read aloud. Select text to translate or listen, view a page in two languages, or listen to an article while keeping the source in view. A compact selection menu and a circular button in the bottom-right corner keep these actions close to what you are reading. The side panel remains available for settings, history, and typed text.
 
 Translation supports Chrome's on-device models, OpenAI, Kimi, and MyMemory. Read aloud uses OpenAI with selectable models, voices, and playback speed, sharing the endpoint and API key configured for OpenAI translation.
 
@@ -14,12 +14,12 @@ Translation supports Chrome's on-device models, OpenAI, Kimi, and MyMemory. Read
 
 ## Features
 
-- **Selection menu:** translate or read selected text directly from the floating Prism menu, with light and dark styles.
+- **Selection menu:** translate or read selected text directly from the floating Prism menu, with light and dark styles. Translations appear beside the selection automatically and can be collapsed into the circular button.
 - **Page translation:** show the original alongside its translation, switch to translation-only mode, or restore the original page.
 - **AI read aloud:** listen to selected passages, article text, input text, translations, or individual words. Choose a model, voice, and speed; pause, resume, move between clips, or stop.
 - **Continuous reading:** prepare upcoming audio while preserving paragraph boundaries, and highlight the source paragraph belonging to the current clip.
 - **English pronunciation:** look up US IPA offline, then use the configured OpenAI service to hear the word.
-- **Per-tab side panels:** translation and reading stay associated with their source tab.
+- **Circular page controls:** page translation and reading start with a small button in the bottom-right corner showing progress and status in its ring. Click to expand progress, playback controls, or a selection translation you collapsed. Reading continues when collapsed. No side panel opens automatically. Each reader belongs to its source tab.
 - **History and favorites:** search, save, and remove translations in the current Chrome profile.
 - **Interface preferences:** English and Simplified Chinese, light and dark themes, and translation progress.
 
@@ -42,12 +42,17 @@ After updating the source, reload the extension in `chrome://extensions` and ref
 | Translate a passage | Select text → Prism menu → **Translate** |
 | Listen to a passage | Select text → Prism menu → **Read aloud** |
 | Look up and hear a word | Translate an English word → view its IPA → **Read word** |
-| Read a bilingual page | Side panel → **Page** → choose bilingual mode and translate |
-| Listen to an article | Side panel → **Page** → **Read article** |
-| Translate the current selection with a shortcut | `Alt+Shift+T` / `⌥⇧T` |
+| Read a bilingual page | Right-click the page → **Translate this page** |
+| Listen to an article | Right-click the page → **Read this article aloud** |
+| Translate selection or page | `Alt+Shift+T` / `⌥⇧T`: selected text when present, otherwise the page |
+| Read / pause / resume | `Alt+Shift+S` / `⌥⇧S`: selected text when present, otherwise the page |
 | Translate or restore the page with a shortcut | `Alt+Shift+P` / `⌥⇧P` |
 
-Keep the side panel open during audio playback. The reading controls apply to the current audio clip; each clip belongs to one source paragraph; longer paragraphs may span multiple clips.
+Pressing Translate on an already translated page keeps the translation; use `⌥⇧P` or Restore to return to the original. During narration, pressing Read again pauses or resumes; selecting different text starts a new reading. These actions require a regular web page that permits extensions.
+
+Open **Settings → Keyboard shortcuts** to see the keys currently assigned by your browser, then choose **Change shortcuts** to customize them. If a shortcut shows “Not assigned”, assign it on the page that opens. Changes take effect immediately without saving Prism settings.
+
+Reading started from the selection menu or page context menu shows a circular button in the bottom-right corner; no side panel is required. Click the circle to expand playback controls, then click it again or use Collapse to return to the circle while reading continues. Use Close to stop playback. Navigating away stops that page's reader. Reading explicitly started inside the side panel still requires that panel to stay open. The reading controls apply to the current audio clip; each clip belongs to one source paragraph; longer paragraphs may span multiple clips.
 
 ## Translation Providers
 
@@ -111,7 +116,7 @@ Article extraction varies by website and skips navigation, forms, hidden content
 - No bundled API keys, analytics, advertising, or remote UI scripts.
 - API keys and translation history stay in local extension storage; keys are excluded from Chrome Sync.
 - Cloud translation and read aloud send the requested text to the configured service. Local translation does not make reading offline.
-- Audio remains in side-panel memory and is not saved to translation history or a persistent cache.
+- Audio remains in player memory and is not saved to translation history or a persistent cache.
 
 See [Privacy notes](PRIVACY.md) for service destinations, permissions, connectors, and removal instructions.
 

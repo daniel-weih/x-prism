@@ -174,6 +174,20 @@ const reader = createReader({ getSettings: () => settings, sendToTab: sendToPane
 Object.assign(copy.en, { readSource: "Read aloud", readAloud: "Read aloud", readHint: "Listen to selected text or the article body.", readPage: "Read article", readSelection: "Read selection", speechSettings: "OpenAI · Read aloud", speechHint: "Uses the API connection configured for OpenAI translation. AI-generated voice.", speechKeyHint: "Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.", voice: "Voice", speechRate: "Playback speed", voicePreview: "Preview voice", previewHint: "Preview uses these choices and incurs API usage. Save settings to use them for reading.", stopReading: "Stop", previousPart: "Previous", nextPart: "Next", readerNote: "AI-generated voice · Keep this panel open while listening." });
 Object.assign(copy.zh, { readSource: "朗读原文", readAloud: "朗读", readHint: "朗读选中的段落，或按顺序朗读文章正文。", readPage: "朗读整篇文章", readSelection: "朗读选中段落", speechSettings: "OpenAI · 朗读设置", speechHint: "共用翻译中的 OpenAI API 配置，声音由 AI 合成。", speechKeyHint: "接口地址和 API Key 与 OpenAI 翻译共用，这里只需选择朗读模型、音色和速度。", voice: "音色", speechRate: "播放速度", voicePreview: "试听当前音色", previewHint: "试听使用当前选项并产生 API 用量；保存设置后用于网页朗读。", stopReading: "停止", previousPart: "上一段", nextPart: "下一段", readerNote: "AI 合成语音 · 朗读时请保持侧边栏打开。" });
 
+Object.assign(copy.en, { keyboardShortcuts: "Keyboard shortcuts", keyboardShortcutsHint: "Use the current selection, or the page. Press Read again to pause or resume.", shortcutSelection: "Translate selection / page", shortcutRead: "Read / pause / resume", shortcutPage: "Translate / restore page", configureShortcuts: "Change shortcuts", shortcutUnassigned: "Not assigned", shortcutUnavailable: "Unavailable", shortcutsOpenFailed: "Open chrome://extensions/shortcuts to change shortcuts." });
+Object.assign(copy.zh, { keyboardShortcuts: "键盘快捷键", keyboardShortcutsHint: "优先处理选中文字，无选区时处理网页；朗读中再次按下可暂停或继续。", shortcutSelection: "翻译选区 / 网页", shortcutRead: "朗读 / 暂停 / 继续", shortcutPage: "翻译 / 恢复网页", configureShortcuts: "修改快捷键", shortcutUnassigned: "未设置", shortcutUnavailable: "无法读取", shortcutsOpenFailed: "请打开 chrome://extensions/shortcuts 修改快捷键。" });
+
+async function refreshShortcuts() {
+  try {
+    const commands = await chrome.commands.getAll();
+    $$('[data-command]').forEach(node => {
+      node.textContent = commands.find(command => command.name === node.dataset.command)?.shortcut || t("shortcutUnassigned");
+    });
+  } catch {
+    $$('[data-command]').forEach(node => { node.textContent = t("shortcutUnavailable"); });
+  }
+}
+
 function translationError(error) {
   if (error.name === "AbortError") return t("translationTimedOut");
   const key = { LOCAL_API_UNAVAILABLE: "localUnavailableHint", LANGUAGE_PAIR_UNAVAILABLE: "localPackUnavailable", TIMEOUT: "translationTimedOut" }[error.code];
@@ -191,6 +205,7 @@ function applyLanguage() {
   $$('[data-i18n-placeholder]').forEach((node) => { node.placeholder = t(node.dataset.i18nPlaceholder); });
   $$('[data-i18n-label]').forEach((node) => { node.title = t(node.dataset.i18nLabel); node.setAttribute("aria-label", node.title); });
   populateLanguageMenus();
+  void refreshShortcuts();
 }
 
 function applyTheme(value) {
@@ -214,7 +229,7 @@ function switchTab(name) {
   $$(".panel").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === name));
   if (name === "history") renderHistory();
   if (name === "page") refreshPageState();
-  if (name === "settings") updateSettingsSaveBar();
+  if (name === "settings") { updateSettingsSaveBar(); void refreshShortcuts(); }
 }
 
 function populateLanguageMenus() {
@@ -888,7 +903,9 @@ async function processPendingAction(value) {
   if (!action || action.tabId !== ownerTabId || !action.id || action.id === lastPendingActionId || Date.now() - action.createdAt > 30_000) return;
   lastPendingActionId = action.id;
   await chrome.storage.session.remove(key);
-  if (action.type === "read-selection" || action.type === "read-page") {
+  if (action.type === "settings") {
+    switchTab("settings");
+  } else if (action.type === "read-selection" || action.type === "read-page") {
     switchTab("page");
     reader.start(action.type === "read-page" ? "page" : "text", action.text);
   } else if (action.type === "selection") {
@@ -931,6 +948,11 @@ async function copyText(text) {
 
 function wireEvents() {
   reader.wire();
+  $("#configure-shortcuts").addEventListener("click", async () => {
+    try { await chrome.tabs.create({ url: "chrome://extensions/shortcuts" }); }
+    catch { showToast(t("shortcutsOpenFailed"), 5000); }
+  });
+  window.addEventListener("focus", () => { void refreshShortcuts(); });
   chrome.tabs.onUpdated.addListener((tabId, change) => { if (tabId === ownerTabId && (change.status === "loading" || change.url)) reader.stop(); });
   $('[data-panel="settings"]').addEventListener("input", updateSettingsSaveBar);
   $('[data-panel="settings"]').addEventListener("change", updateSettingsSaveBar);

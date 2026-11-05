@@ -43,9 +43,17 @@
   let pageActive = false;
   let lastSelection = "";
   let lastSelectionRect = null;
+  let lastPointerAnchor = null;
   let hideTimer;
   let selectionRequest = 0;
   let pageTranslationPending = false;
+  let pageRequest = 0;
+  let readerSession = null, readerRequest = null, readerFrame = null;
+  let readerAttached = false, readerToggleRevision = 0, readerSelectionText = "";
+  let selectionState = null, pageState = null, readerState = null;
+  let cardAnchorRange = null, cardAnchorRect = null;
+  let cardPointerOffset = null;
+  let cardBelow = null;
   let pageSnapshotId = null;
   let pageSnapshotUrl = "";
   let detectorPromise;
@@ -75,11 +83,39 @@
       .bubble-divider { width:1px; height:12px; margin:0 1px; background:var(--menu-border); flex-shrink:0; }
       .gem { width:22px; height:22px; display:grid; place-items:center; }
       .gem svg,.brand svg { width:22px; height:22px; display:block; }
+      .dock { position:fixed; right:16px; bottom:16px; width:52px; height:52px; pointer-events:none; }
+      .dock[hidden] { display:none; }
+      .dock-details { position:absolute; right:0; bottom:62px; display:flex; flex-direction:column; align-items:flex-end; gap:8px; width:min(390px,calc(100vw - 32px)); max-height:calc(100vh - 100px); padding:4px; overflow:auto; }
+      /* Preserve the mounted audio frame and its layout while the controls are tucked away. */
+      .dock-details[inert] { visibility:hidden; pointer-events:none; }
+      .status-orb { position:relative; display:grid; place-items:center; width:52px; height:52px; padding:0; border:1px solid #e2e2e2; border-radius:50%; color:#30343b; background:#fff; box-shadow:0 3px 14px #18202d24; cursor:pointer; pointer-events:auto; }
+      .status-orb.dark { color:#eee; background:#26282d; border-color:#45484f; }
+      .status-orb:hover { box-shadow:0 4px 18px #18202d38; }
+      .orb-ring { position:absolute; inset:3px; width:44px; height:44px; transform:rotate(-90deg); fill:none; stroke:currentColor; stroke-width:2; }
+      .orb-track { opacity:.12; }
+      .orb-progress { stroke-linecap:round; transition:stroke-dashoffset .2s; }
+      .status-orb[data-busy="true"] .orb-ring { animation:spin 1.2s linear infinite; }
+      .status-orb[data-state="error"] .orb-ring { color:#c0771a; }
+      .orb-symbol { display:grid; place-items:center; width:22px; height:22px; }
+      .orb-symbol svg { width:22px; height:22px; }
+      .orb-symbol > svg { display:none; }
+      .status-orb[data-symbol="translation"] .orb-translation,.status-orb[data-symbol="reading"] .orb-reading,.status-orb[data-symbol="paused"] .orb-paused,.status-orb[data-symbol="done"] .orb-done,.status-orb[data-symbol="error"] .orb-error { display:block; }
+      .reader-frame { display:block; width:100%; height:142px; flex-shrink:0; border:0; background:transparent; pointer-events:auto; }
+      .page-status { width:100%; flex-shrink:0; pointer-events:auto; padding:12px; border:1px solid #e2e2e2; border-radius:12px; color:#242424; background:#fff; box-shadow:0 3px 12px #0002; font:12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      .page-status[hidden] { display:none; }
+      .page-status.dark { color:#eee; background:#242424; border-color:#424242; color-scheme:dark; }
+      .page-status .page-row { display:flex; align-items:center; gap:8px; }
+      .page-status .page-label { flex:1; min-width:0; overflow-wrap:anywhere; }
+      .page-status button { border:1px solid #8885; border-radius:6px; padding:4px 8px; background:transparent; color:inherit; cursor:pointer; }
+      .page-status button[hidden] { display:none; }
+      .page-status progress { width:100%; height:3px; margin-top:8px; accent-color:currentColor; }
       .card { --surface:#fff; --subtle:#f6f6f6; --stroke:#e2e2e2; --text:#242424; --muted:#666; --inverse:#fff; color-scheme:light;
-        position:fixed; display:none; width:min(390px,calc(100vw - 24px)); max-height:calc(100vh - 20px); pointer-events:auto; overflow:auto; border:1px solid var(--stroke); border-radius:12px; color:var(--text); background:var(--surface); box-shadow:0 8px 32px #0002; font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+        position:relative; flex-shrink:0; display:none; width:100%; max-height:calc(100vh - 112px); pointer-events:auto; overflow:auto; border:1px solid var(--stroke); border-radius:12px; color:var(--text); background:var(--surface); box-shadow:0 8px 32px #0002; font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      .card.anchored { position:fixed; width:min(390px,calc(100vw - 24px)); max-height:calc(100vh - 24px); }
       .card.dark { --surface:#202020; --subtle:#292929; --stroke:#404040; --text:#ededed; --muted:#b0b0b0; --inverse:#202020; color-scheme:dark; }
       .head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:13px 16px 10px; }
       .brand { display:flex; align-items:center; gap:8px; font-weight:700; }
+      .selection-status { font-size:10px; font-weight:400; color:var(--muted); white-space:nowrap; }
       .provider { padding:2px 5px; border:1px solid var(--stroke); border-radius:4px; font-size:9px; font-weight:500; color:var(--muted); }
       .close,.tool { border:0; color:var(--muted); background:transparent; cursor:pointer; border-radius:6px; }
       .close { width:28px; height:28px; font-size:20px; }
@@ -100,7 +136,7 @@
       .tool svg { display:block; width:16px; height:16px; }
       .toast { position:fixed; left:50%; bottom:24px; display:none; max-width:min(440px,calc(100vw - 28px)); transform:translateX(-50%); padding:10px 14px; border:1px solid #ffffff44; border-radius:8px; pointer-events:none; color:#fff; background:#242424; box-shadow:0 4px 16px #0002; font:500 12px/1.5 -apple-system,sans-serif; }
       @keyframes spin { to { transform:rotate(360deg); } }
-      @media(prefers-reduced-motion:reduce) { .result.loading::after { animation:none; } }
+      @media(prefers-reduced-motion:reduce) { .result.loading::after,.status-orb[data-busy="true"] .orb-ring { animation:none; } .orb-progress { transition:none; } }
     </style>
     <div class="bubble" role="toolbar" aria-label="Selected text actions">
       <span class="bubble-brand" role="img" aria-label="Prism" title="Prism">${logo("bubble")}</span>
@@ -108,12 +144,27 @@
       <span class="bubble-divider" aria-hidden="true"></span>
       <button class="bubble-action bubble-read" type="button"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg><span>Read aloud</span></button>
     </div>
-    <section class="card" role="dialog" aria-label="Prism translation">
-      <div class="head"><div class="brand">${logo("card")} Prism <span class="provider"></span></div><button class="close" aria-label="Close">×</button></div>
+    <section class="card anchored" role="dialog" aria-label="Prism translation">
+      <div class="head"><div class="brand">${logo("card")} Prism <span class="provider"></span><span class="selection-status" role="status"></span></div><div><button class="close collapse" aria-label="Collapse">−</button><button class="close dismiss" aria-label="Close">×</button></div></div>
       <div class="source"></div><div class="pronunciation" hidden aria-live="polite"><span></span><button class="speak-source" type="button">朗读单词</button></div><div class="result"></div>
       <div class="recovery" hidden><button class="reload-page" type="button">刷新当前网页</button></div>
       <div class="foot"><span class="meta"></span><div class="tools"><button class="tool copy" title="Copy">Copy</button><button class="tool speak" title="Speak"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg></button><button class="tool panel" title="Open side panel">↗</button></div></div>
     </section>
+    <div class="dock" hidden>
+    <div class="dock-details" id="prism-details" inert aria-hidden="true">
+    <section class="page-status" hidden aria-label="Page translation"><div class="page-row"><span class="page-label" role="status"></span><button class="page-stop" type="button">Stop</button><button class="page-retry" type="button" hidden>Retry</button><button class="page-restore" type="button" hidden>Restore</button><button class="page-close" type="button" aria-label="Close">×</button></div><progress max="1" value="0" aria-label="Translation progress"></progress></section>
+    </div>
+    <button class="status-orb" type="button" aria-label="Prism" aria-expanded="false" aria-controls="prism-details" data-symbol="translation">
+      <svg class="orb-ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="orb-track" cx="22" cy="22" r="20"/><circle class="orb-progress" cx="22" cy="22" r="20" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
+      <span class="orb-symbol" aria-hidden="true">
+        <svg class="orb-translation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h12M9 3v2M5 5c0 5 4 8 8 10M13 5c0 5-4 8-9 10M14 21l4-10 4 10M16 17h4"/></svg>
+        <svg class="orb-reading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg>
+        <svg class="orb-paused" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg class="orb-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg>
+        <svg class="orb-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v9M12 18v1"/></svg>
+      </span>
+    </button>
+    </div>
     <div class="toast"></div>`;
   (document.documentElement || document.body).appendChild(host);
 
@@ -126,6 +177,9 @@
   const toastNode = shadow.querySelector(".toast");
   const pronunciationNode = shadow.querySelector(".pronunciation");
   const recoveryNode = shadow.querySelector(".recovery");
+  const dock = shadow.querySelector(".dock");
+  const dockDetails = shadow.querySelector(".dock-details");
+  const statusOrb = shadow.querySelector(".status-orb");
   let browserLanguage = navigator.language || "en";
   try { browserLanguage = chrome.i18n.getUILanguage(); } catch { /* cached fallback survives an extension reload */ }
 
@@ -134,6 +188,110 @@
   }
 
   const label = (zh, en) => chineseUi() ? zh : en;
+
+  function positionSelectionCard() {
+    if (!card.classList.contains("anchored") || card.style.display !== "block") return;
+    if (cardAnchorRange?.commonAncestorContainer.isConnected && !cardAnchorRange.collapsed) {
+      const current = cardAnchorRange.getBoundingClientRect();
+      if (current.width || current.height) {
+        cardAnchorRect = cardPointerOffset
+          ? { left: current.left + cardPointerOffset.x, width: 0, top: current.top + cardPointerOffset.y, bottom: current.top + cardPointerOffset.y }
+          : current;
+      }
+    }
+    const rect = cardAnchorRect;
+    if (!rect) return;
+    const margin = 12, gap = 9;
+    const below = innerHeight - margin - rect.bottom - gap;
+    const above = rect.top - gap - margin;
+    // Choose the side once. Async translation/pronunciation must not flip the
+    // popup across the selection when its contents grow.
+    cardBelow ??= below >= card.offsetHeight || below >= above;
+    const minHeight = Math.min(120, Math.max(0, innerHeight - margin * 2));
+    const edge = cardBelow
+      ? Math.max(margin, Math.min(rect.bottom + gap, innerHeight - margin - minHeight))
+      : Math.min(innerHeight - margin, Math.max(rect.top - gap, margin + minHeight));
+    card.style.left = `${Math.max(margin, Math.min(innerWidth - card.offsetWidth - margin, rect.left + rect.width / 2 - card.offsetWidth / 2))}px`;
+    card.style.top = cardBelow ? `${edge}px` : "auto";
+    card.style.bottom = cardBelow ? "auto" : `${innerHeight - edge}px`;
+    card.style.maxHeight = `${Math.max(0, cardBelow ? innerHeight - margin - edge : edge - margin)}px`;
+  }
+
+  function showSelectionCard(rect) {
+    const selection = document.getSelection();
+    cardAnchorRange = selection?.rangeCount && selection.toString().trim() === card.dataset.source
+      ? selection.getRangeAt(0).cloneRange() : null;
+    cardAnchorRect = rect || { left: innerWidth / 2 - 1, width: 2, top: 80, bottom: 100 };
+    const rangeRect = cardAnchorRange?.getBoundingClientRect();
+    cardPointerOffset = rect?.pointer && rangeRect
+      ? { x: rect.left - rangeRect.left, y: rect.top - rangeRect.top } : null;
+    cardBelow = null;
+    card.style.removeProperty("max-height");
+    card.style.removeProperty("bottom");
+    card.scrollTop = 0;
+    resultNode.scrollTop = 0;
+    shadow.insertBefore(card, dock);
+    card.classList.add("anchored");
+    card.style.display = "block";
+    setDockExpanded(false);
+    positionSelectionCard();
+  }
+
+  function collapseSelection(focusOrb = false) {
+    if (!selectionState || card.style.display !== "block") return;
+    card.classList.remove("anchored");
+    card.style.removeProperty("left");
+    card.style.removeProperty("top");
+    card.style.removeProperty("bottom");
+    card.style.removeProperty("max-height");
+    dockDetails.prepend(card);
+    setDockExpanded(false, focusOrb);
+  }
+
+  function dismissSelection() {
+    card.style.display = "none";
+    selectionRequest++;
+    selectionState = null;
+    cardAnchorRange = null;
+    cardAnchorRect = null;
+    cardPointerOffset = null;
+    renderOrb();
+  }
+
+  function setDockExpanded(expanded, focusOrb = false) {
+    dockDetails.inert = !expanded;
+    dockDetails.setAttribute("aria-hidden", String(!expanded));
+    statusOrb.setAttribute("aria-expanded", String(expanded));
+    renderOrb();
+    if (expanded) dockDetails.scrollTop = dockDetails.scrollHeight;
+    if (focusOrb) statusOrb.focus({ preventScroll: true });
+  }
+
+  function renderOrb() {
+    const tasks = [readerState, pageState, card.classList.contains("anchored") ? null : selectionState].filter(Boolean);
+    dock.hidden = !tasks.length;
+    if (!tasks.length) {
+      dockDetails.inert = true;
+      dockDetails.setAttribute("aria-hidden", "true");
+      statusOrb.setAttribute("aria-expanded", "false");
+      return;
+    }
+    const current = tasks.find(task => task.state === "error") || tasks.find(task => task.state === "loading") || tasks[0];
+    const descriptions = tasks.map(task => {
+      const kind = task.kind === "reading" ? label("朗读", "Reading") : label("翻译", "Translation");
+      const states = { loading: label("进行中", "in progress"), playing: label("播放中", "playing"), paused: label("已暂停", "paused"), done: label("已完成", "complete"), stopped: label("已停止", "stopped"), error: label("失败，点击查看", "failed; open for details") };
+      return `${kind} · ${states[task.state]}${task.progress > 0 ? ` · ${Math.round(task.progress * 100)}%` : ""}`;
+    });
+    const busy = current.state === "loading" && !current.progress;
+    statusOrb.dataset.state = current.state;
+    statusOrb.dataset.busy = String(busy);
+    statusOrb.dataset.symbol = ["error", "paused", "done"].includes(current.state) ? current.state : current.kind;
+    statusOrb.classList.toggle("dark", darkMode());
+    statusOrb.querySelector(".orb-progress").setAttribute("stroke-dashoffset", String(100 * (1 - (busy ? .25 : current.progress))));
+    const action = dockDetails.inert ? label("点击展开", "Click to expand") : label("点击收起", "Click to collapse");
+    statusOrb.title = [...descriptions, action].join("\n");
+    statusOrb.setAttribute("aria-label", statusOrb.title.replaceAll("\n", "; "));
+  }
 
   function localizeControls() {
     bubble.setAttribute("aria-label", label("选中文字操作", "Selected text actions"));
@@ -144,11 +302,12 @@
       button.title = label(zh, en); button.setAttribute("aria-label", button.title);
     }
     shadow.querySelector(".copy").textContent = label("复制", "Copy");
-    for (const [selector, zh, en] of [[".close", "关闭", "Close"], [".copy", "复制译文", "Copy translation"], [".speak", "朗读译文", "Read translation"], [".panel", "打开侧栏", "Open side panel"]]) {
+    for (const [selector, zh, en] of [[".collapse", "收起到圆形按钮", "Collapse to circle"], [".dismiss", "关闭", "Close"], [".copy", "复制译文", "Copy translation"], [".speak", "朗读译文", "Read translation"], [".panel", "打开侧栏", "Open side panel"]]) {
       const node = shadow.querySelector(selector);
       node.title = label(zh, en);
       node.setAttribute("aria-label", node.title);
     }
+    renderOrb();
   }
 
   function isAlive() {
@@ -175,6 +334,9 @@
     disposed = true;
     CSS.highlights?.delete("prism-reading");
     selectionRequest++;
+    pageRequest++;
+    readerFrame?.remove();
+    readerFrame = null; readerSession = null; readerRequest = null;
     clearTimeout(hideTimer);
     clearTimeout(selectionTimer);
     listeners.abort();
@@ -191,7 +353,7 @@
 
   globalThis[RUNTIME_MARKER] = { isAlive, dispose };
 
-  function showReconnect(text = lastSelection, rect = lastSelectionRect) {
+  function showReconnect(text = lastSelection, rect = lastSelectionRect, reveal = true) {
     if (disposed || !host.isConnected) return;
     disconnected = true;
     selectionRequest++;
@@ -206,12 +368,16 @@
       : "Prism was updated or disconnected. Save any unfinished work, then refresh this page to continue translating.";
     metaNode.textContent = chineseUi() ? "需要刷新网页" : "Refresh page to reconnect";
     providerNode.textContent = chineseUi() ? "已断开" : "DISCONNECTED";
+    shadow.querySelector(".selection-status").textContent = "";
     shadow.querySelector(".tools").hidden = true;
     shadow.querySelector(".reload-page").textContent = chineseUi() ? "刷新当前网页" : "Refresh this page";
     recoveryNode.hidden = false;
     card.classList.toggle("dark", darkMode());
     card.style.display = "block";
-    place(card, rect || { left: innerWidth / 2 - 1, width: 2, top: 80, bottom: 100 });
+    selectionState = { kind: "translation", state: "error", progress: 0 };
+    if (reveal) showSelectionCard(rect);
+    else positionSelectionCard();
+    renderOrb();
   }
 
   Promise.resolve().then(() => { assertConnected(); return storage.sync.get("prismSettings"); }).then((stored) => {
@@ -249,9 +415,15 @@
     if (!text || selection.rangeCount === 0 || text.length > 12_000) return null;
     const range = selection.getRangeAt(0);
     if (host.contains(range.commonAncestorContainer)) return null;
-    const rect = range.getBoundingClientRect();
+    let rect = range.getBoundingClientRect();
     if (!rect.width && !rect.height) return null;
-    return { text, rect };
+    if (lastPointerAnchor && text === lastSelection
+      && range.compareBoundaryPoints(Range.START_TO_START, lastPointerAnchor.range) === 0
+      && range.compareBoundaryPoints(Range.END_TO_END, lastPointerAnchor.range) === 0) {
+      const top = rect.top + lastPointerAnchor.y;
+      rect = { left: rect.left + lastPointerAnchor.x, width: 0, top, bottom: top, pointer: true };
+    }
+    return { text, rect, range };
   }
 
   function place(element, rect, preferredBelow = true) {
@@ -261,7 +433,7 @@
     let top = preferredBelow ? rect.bottom + 9 : rect.top - height - 9;
     if (top + height > innerHeight - 10) top = Math.max(10, rect.top - height - 9);
     element.style.left = `${left}px`;
-    element.style.top = `${Math.max(10, top)}px`;
+    element.style.top = `${Math.max(10, Math.min(innerHeight - height - 10, top))}px`;
   }
 
   function hideBubble() { bubble.style.display = "none"; }
@@ -282,6 +454,8 @@
   function showBubble(details) {
     lastSelection = details.text;
     lastSelectionRect = details.rect;
+    const bounds = details.range.getBoundingClientRect();
+    lastPointerAnchor = { range: details.range.cloneRange(), x: details.rect.left - bounds.left, y: details.rect.top - bounds.top };
     bubble.classList.toggle("dark", selectionMenuDark());
     bubble.style.display = "flex";
     place(bubble, details.rect);
@@ -295,6 +469,9 @@
       if (disposed || !host.isConnected) return;
       const details = selectionDetails();
       if (details) {
+        // Anchor at the drag endpoint, not the center of a potentially long,
+        // multiline selection. Keep this point when the user clicks Translate.
+        details.rect = { left: event.clientX, width: 0, top: event.clientY, bottom: event.clientY, pointer: true };
         showBubble(details);
         if (settings.autoTranslateSelection) translateSelection(details.text, details.rect);
       } else {
@@ -306,8 +483,9 @@
   document.addEventListener("mousedown", (event) => {
     if (!host.isConnected) { dispose(); return; }
     if (event.composedPath().includes(host)) return;
+    clearTimeout(selectionTimer);
     hideBubble();
-    if (!card.contains(event.target)) card.style.display = "none";
+    if (card.classList.contains("anchored") || !dockDetails.inert) dismissSelection();
   }, { capture: true, signal: listeners.signal });
 
   async function detectLanguage(text) {
@@ -336,7 +514,7 @@
     return preferred;
   }
 
-  async function localTranslate(texts, source, target, onProgress) {
+  async function localTranslate(texts, source, target, onProgress, isCurrent = () => true) {
     if (!("Translator" in globalThis)) throw new Error(label("当前环境无法使用本地翻译，请使用受支持的 Chrome（138+）或选择其他引擎。", "Local translation is unavailable. Use a supported Chrome version (138+) or choose another engine."));
     const key = `${source}:${target}`;
     if (!translatorCache.has(key)) {
@@ -357,21 +535,23 @@
     onProgress?.(label("正在翻译…", "Translating…"));
     const output = [];
     for (let index = 0; index < texts.length; index += 1) {
+      if (!isCurrent()) throw new DOMException("Translation stopped", "AbortError");
       output.push(await translator.translate(texts[index]));
       onProgress?.(`${label("正在翻译…", "Translating…")} ${index + 1}/${texts.length}`);
     }
     return output;
   }
 
-  async function translateTexts(texts, onProgress) {
+  async function translateTexts(texts, onProgress, isCurrent = () => true) {
     assertConnected();
     const current = { ...settings };
     if (current.sourceLanguage === "auto") onProgress?.(label("正在识别原文语言…", "Detecting source language…"));
     const detected = current.sourceLanguage === "auto" ? await detectLanguage(texts.slice(0, 6).join(" ")) : current.sourceLanguage;
+    if (!isCurrent()) throw new DOMException("Translation stopped", "AbortError");
     const source = detected === "und" ? "en" : detected;
     const target = smartTarget(source, current.targetLanguage);
     if (current.provider === "chrome") {
-      return { translations: await localTranslate(texts, source, target, onProgress), source, target, provider: current.provider };
+      return { translations: await localTranslate(texts, source, target, onProgress, isCurrent), source, target, provider: current.provider };
     }
     onProgress?.(label("正在翻译…", "Translating…"));
     const response = await sendRuntimeMessage({
@@ -393,6 +573,7 @@
       return;
     }
     hideBubble();
+    selectionState = { kind: "translation", state: "loading", progress: 0 };
     const request = ++selectionRequest;
     recoveryNode.hidden = true;
     shadow.querySelector(".tools").hidden = false;
@@ -407,13 +588,14 @@
         pronunciationNode.querySelector("span").textContent = value ? `${value.label} ${value.ipa}` : (chinese ? (response?.ok ? "离线词典暂未收录" : "音标词典暂不可用") : (response?.ok ? "Not in offline dictionary" : "Dictionary unavailable"));
         pronunciationNode.title = value?.source || "";
         pronunciationNode.querySelector("button").textContent = chinese ? "朗读单词" : "Read word";
-        pronunciationNode.querySelector("button").title = chinese ? "使用已设置的模型和音色，在侧栏朗读原单词" : "Read the original word in the side panel with your selected model and voice";
+        pronunciationNode.querySelector("button").title = chinese ? "使用已设置的模型和音色，在小浮窗朗读原单词" : "Read the original word in the compact player with your selected model and voice";
         pronunciationNode.hidden = false;
-        if (rect) place(card, rect);
-      }).catch((error) => { if (request === selectionRequest && contextLost(error)) showReconnect(text, rect); });
+        positionSelectionCard();
+      }).catch((error) => { if (request === selectionRequest && contextLost(error)) showReconnect(text, rect, false); });
     }
     card.classList.toggle("dark", darkMode());
     sourceNode.textContent = text.length > 260 ? `${text.slice(0, 260)}…` : text;
+    shadow.querySelector(".selection-status").textContent = label("翻译中", "Translating");
     resultNode.textContent = label("正在翻译…", "Translating…");
     resultNode.classList.add("loading");
     metaNode.textContent = "";
@@ -421,18 +603,20 @@
       : settings.provider === "codex" ? "OPENAI CLI"
       : settings.provider === "openai" ? `OPENAI ${(settings.openaiConnection || "api").toUpperCase()}`
       : settings.provider === "kimi" ? `KIMI ${(settings.kimiConnection || "cli").toUpperCase()}` : settings.provider.toUpperCase();
-    card.style.display = "block";
-    place(card, rect || { left: innerWidth / 2 - 1, width: 2, top: 80, bottom: 100 });
+    showSelectionCard(rect);
     try {
       const result = await translateTexts([text], (label) => { if (request === selectionRequest) metaNode.textContent = label; });
       if (request !== selectionRequest) return;
       const translated = result.translations[0];
+      shadow.querySelector(".selection-status").textContent = label("已完成", "Done");
       resultNode.textContent = translated;
       resultNode.classList.remove("loading");
       metaNode.textContent = `${result.source}  →  ${result.target}`;
       card.dataset.translation = translated;
       card.dataset.source = text;
-      if (rect) place(card, rect);
+      selectionState = { kind: "translation", state: "done", progress: 1 };
+      renderOrb();
+      positionSelectionCard();
       if (settings.saveHistory) {
         sendRuntimeMessage({
           type: "PRISM_ADD_HISTORY",
@@ -446,20 +630,65 @@
       }
     } catch (error) {
       if (request !== selectionRequest) return;
-      if (contextLost(error)) { showReconnect(text, rect); return; }
+      if (contextLost(error)) { showReconnect(text, rect, false); return; }
+      shadow.querySelector(".selection-status").textContent = label("失败", "Failed");
       resultNode.textContent = error.message;
       resultNode.classList.remove("loading");
       metaNode.textContent = label("暂时无法翻译", "Translation unavailable");
+      selectionState = { kind: "translation", state: "error", progress: 0 };
+      renderOrb();
+      positionSelectionCard();
     }
   }
 
   function listen(node, type, handler) { node.addEventListener(type, handler, { signal: listeners.signal }); }
-  function openReader(text) {
-    if (!text) return;
-    // Invoke from the click handler so sidePanel.open retains user activation.
-    sendRuntimeMessage({ type: "PRISM_OPEN_PANEL", action: { type: "read-selection", text } })
-      .then(response => { if (!response?.ok) throw new Error(response?.error || label("无法打开朗读侧栏", "Unable to open reading panel")); })
-      .catch(error => { if (contextLost(error)) showReconnect(text); else showToast(error.message); });
+  function closeReader() {
+    readerSession = null; readerRequest = null;
+    readerAttached = false; readerToggleRevision = 0; readerSelectionText = "";
+    readerFrame?.remove(); readerFrame = null;
+    readerState = null;
+    renderOrb();
+    CSS.highlights?.delete("prism-reading");
+  }
+  function openReader(text, wholePage = false) {
+    if (!isAlive()) { showReconnect(text); return; }
+    const request = collectReading(!wholePage);
+    if (text && !wholePage && request.paragraphs?.[0]?.text !== text) {
+      request.paragraphs = [{ text }]; request.snapshot = null;
+    }
+    if (!request.ok || !request.paragraphs?.some(p => p.text?.trim())) {
+      showToast(request.error || label("请先选择文字。", "Select some text first.")); return;
+    }
+    closeReader();
+    readerSession = crypto.randomUUID(); readerRequest = request;
+    readerSelectionText = wholePage ? "" : request.paragraphs.map(p => p.text).join("");
+    readerFrame = document.createElement("iframe");
+    readerFrame.className = "reader-frame";
+    readerFrame.title = label("Prism 朗读控制", "Prism reading controls");
+    readerFrame.allow = "autoplay";
+    readerFrame.src = runtime.getURL(`reader/reader.html?session=${readerSession}`);
+    dockDetails.append(readerFrame);
+    readerState = { kind: "reading", state: "loading", progress: 0 };
+    collapseSelection();
+    setDockExpanded(false);
+  }
+  function readSelectionOrPage() {
+    const text = document.getSelection()?.toString().trim() || "";
+    if (text.length > 240_000) {
+      showToast(label("选区过长，请选择部分段落朗读。", "Selection too long. Select a smaller section.")); return;
+    }
+    hideBubble();
+    if (readerSession && readerFrame?.isConnected && readerRequest?.url === location.href
+      && readerState?.state !== "done" && (!text || text === readerSelectionText)) {
+      const session = readerSession;
+      const revision = ++readerToggleRevision;
+      // A shortcut pressed before the iframe attaches is applied at startup.
+      if (readerAttached) sendRuntimeMessage({ type: "PRISM_READER_CONTROL", session, revision })
+        .then(response => { if (!response?.ok) throw new Error("Reading controls unavailable."); })
+        .catch(() => { if (session === readerSession) showToast(label("请展开朗读窗口操作播放。", "Open the reader to control playback.")); });
+      return;
+    }
+    openReader(text, !text);
   }
   // Keep the webpage selection intact while pressing either action.
   listen(bubble, "mousedown", event => event.preventDefault());
@@ -467,15 +696,23 @@
   listen(shadow.querySelector(".bubble-read"), "click", () => {
     const text = lastSelection;
     if (!text) return;
-    hideBubble(); card.style.display = "none"; selectionRequest++;
+    hideBubble(); card.style.display = "none"; selectionRequest++; selectionState = null;
     openReader(text);
   });
-  listen(document, "keydown", event => { if (event.key === "Escape") { hideBubble(); card.style.display = "none"; selectionRequest++; } });
-  document.addEventListener("scroll", hideBubble, { capture: true, passive: true, signal: listeners.signal });
-  listen(window, "resize", hideBubble);
+  listen(statusOrb, "click", () => setDockExpanded(dockDetails.inert));
+  listen(document, "keydown", event => {
+    if (event.key !== "Escape") return;
+    hideBubble();
+    const focusOrb = card.contains(shadow.activeElement) || dockDetails.contains(shadow.activeElement);
+    collapseSelection();
+    setDockExpanded(false, focusOrb);
+  });
+  document.addEventListener("scroll", () => { hideBubble(); positionSelectionCard(); }, { capture: true, passive: true, signal: listeners.signal });
+  listen(window, "resize", () => { hideBubble(); positionSelectionCard(); });
   listen(shadow.querySelector(".reload-page"), "click", () => location.reload());
   listen(shadow.querySelector(".speak-source"), "click", () => openReader(card.dataset.source));
-  listen(shadow.querySelector(".close"), "click", () => { card.style.display = "none"; selectionRequest++; });
+  listen(shadow.querySelector(".dismiss"), "click", dismissSelection);
+  listen(shadow.querySelector(".collapse"), "click", () => collapseSelection(true));
   listen(shadow.querySelector(".copy"), "click", async () => {
     if (!card.dataset.translation) return;
     try {
@@ -580,32 +817,96 @@
     return { ok: true, applied, skipped, active: pageActive };
   }
 
-  async function translateCurrentPage() {
+  const pageStatus = shadow.querySelector(".page-status");
+  function showPageStatus(text, completed = 0, total = 1, state = pageTranslationPending ? "loading" : "done") {
+    pageStatus.hidden = false; pageStatus.classList.toggle("dark", darkMode());
+    pageStatus.querySelector(".page-label").textContent = text;
+    pageStatus.querySelector("progress").value = completed / total;
+    pageStatus.querySelector(".page-retry").hidden = true;
+    pageStatus.querySelector(".page-retry").textContent = label("重试", "Retry");
+    pageStatus.querySelector(".page-stop").hidden = !pageTranslationPending;
+    pageStatus.querySelector(".page-stop").textContent = label("停止", "Stop");
+    pageStatus.querySelector(".page-restore").hidden = !pageActive;
+    pageStatus.querySelector(".page-restore").textContent = label("恢复原文", "Restore");
+    pageState = { kind: "translation", state, progress: Math.max(0, Math.min(1, completed / total)) };
+    renderOrb();
+  }
+  function stopPageTranslation() { pageRequest++; pageTranslationPending = false; }
+  listen(pageStatus.querySelector(".page-stop"), "click", () => {
+    stopPageTranslation(); showPageStatus(label("翻译已停止", "Translation stopped"), pageState?.progress || 0, 1, "stopped");
+  });
+  listen(pageStatus.querySelector(".page-retry"), "click", () => {
+    stopPageTranslation(); restorePage(); translateCurrentPage();
+  });
+  listen(pageStatus.querySelector(".page-restore"), "click", () => {
+    stopPageTranslation(); restorePage(); showPageStatus(label("已恢复原文", "Original restored"), 1);
+  });
+  listen(pageStatus.querySelector(".page-close"), "click", () => {
+    stopPageTranslation(); pageStatus.hidden = true; pageState = null; renderOrb();
+  });
+  function translateSelectionOrPage() {
+    const details = selectionDetails();
+    if (details) {
+      translateSelection(details.text, details.rect);
+    } else if (document.getSelection()?.toString().trim()) {
+      // An unsupported/oversized selection must not trigger a whole-page job.
+      showToast(label("请缩短选区，选择可见的网页文字。", "Select a shorter passage of visible page text."));
+    } else {
+      hideBubble();
+      dismissSelection();
+      translateCurrentPage(false);
+    }
+  }
+
+  async function translateCurrentPage(toggle = true) {
     if (disposed || !host.isConnected) return;
     if (!isAlive()) { showReconnect(); return; }
-    if (pageTranslationPending) { showToast(label("网页正在翻译，请稍候。", "Page translation is already in progress.")); return; }
+    if (pageTranslationPending) { showPageStatus(label("网页正在翻译…", "Translating page…")); return; }
+    setDockExpanded(false);
     if (pageActive) {
-      restorePage();
+      if (toggle) { restorePage(); showPageStatus(label("已恢复原文", "Original restored"), 1); }
+      else showPageStatus(label("网页已翻译", "Page already translated"), 1);
       return;
     }
+    const request = ++pageRequest;
     const snapshot = collectPage();
     if (!snapshot.items.length) {
-      showToast(label("没有找到可翻译的网页文字。", "No translatable text found on this page."));
-      return;
+      showPageStatus(label("没有找到可翻译的网页文字。", "No translatable text found.")); return;
     }
     pageTranslationPending = true;
-    showToast(label(`正在翻译 ${snapshot.items.length} 个片段…`, `Translating ${snapshot.items.length} segments…`), 60_000);
+    const current = () => request === pageRequest && !disposed && host.isConnected && pageSnapshotId === snapshot.snapshotId && pageSnapshotUrl === location.href;
+    let applied = 0;
+    showPageStatus(label("正在翻译网页…", "Translating page…"));
     try {
-      const result = await translateTexts(snapshot.items.map(({ text }) => text), (label) => showToast(label, 60_000));
-      if (disposed || !host.isConnected) return;
-      const applied = applyPageBatch(snapshot.items.map((item, index) => ({ id: item.id, translation: result.translations[index] })), pageMode, snapshot.snapshotId);
-      if (!applied.ok || !applied.applied) throw new Error(label("网页内容已变化，请重新翻译。", "The page changed. Please translate it again."));
-      showToast(`${label(`已翻译 ${applied.applied} 个片段`, `Translated ${applied.applied} segments`)}${applied.skipped ? label(` · 跳过 ${applied.skipped} 个已变化片段`, ` · ${applied.skipped} changed segments skipped`) : ""} · ${result.source} → ${result.target}`);
+      // Small batches let Stop discard the in-flight result and prevent further
+      // requests, while completed passages remain available until Restore.
+      for (let index = 0; index < snapshot.items.length; index += 20) {
+        if (!current()) return;
+        const batch = snapshot.items.slice(index, index + 20);
+        const result = await translateTexts(batch.map(({ text }) => text), text => {
+          if (current()) showPageStatus(`${text} · ${index}/${snapshot.items.length}`, index, snapshot.items.length);
+        }, current);
+        if (!current()) return;
+        const updated = applyPageBatch(batch.map((item, i) => ({ id: item.id, translation: result.translations[i] })), pageMode, snapshot.snapshotId);
+        if (!updated.ok) throw new Error(label("网页内容已变化，请重新翻译。", "The page changed. Please translate again."));
+        applied += updated.applied;
+        showPageStatus(label(`已翻译 ${applied} 个片段`, `Translated ${applied} segments`), index + batch.length, snapshot.items.length);
+      }
+      if (!applied) throw new Error(label("网页内容已变化，请重新翻译。", "The page changed. Please translate again."));
     } catch (error) {
-      if (pageSnapshotId === snapshot.snapshotId) restorePage();
+      if (!current()) return;
       if (contextLost(error)) { showReconnect(); return; }
-      showToast(error.message, 5000);
-    } finally { pageTranslationPending = false; }
+      showPageStatus(error.message, pageState?.progress || 0, 1, "error");
+      pageStatus.querySelector(".page-retry").hidden = false;
+    } finally {
+      if (request === pageRequest) {
+        pageTranslationPending = false;
+        pageStatus.querySelector(".page-stop").hidden = true;
+        pageStatus.querySelector(".page-restore").hidden = !pageActive;
+        if (pageState?.state === "loading") pageState.state = "done";
+        renderOrb();
+      }
+    }
   }
 
   let readingSnapshot = null;
@@ -664,12 +965,50 @@
 
   function onRuntimeMessage(message, sender, sendResponse) {
     if (disposed) return false;
+    if (message?.readerSession) {
+      if (message.readerSession !== readerSession) {
+        sendResponse({ ok: false, error: "Reading page changed." }); return false;
+      }
+      if (readerRequest?.url !== location.href) {
+        closeReader(); sendResponse({ ok: false, error: "Reading page changed." }); return false;
+      }
+      if (message.type === "PRISM_READER_ATTACH") {
+        readerAttached = true;
+        sendResponse({ ...readerRequest, toggleRevision: readerToggleRevision }); return false;
+      }
+      if (message.type === "PRISM_READER_ALIVE") { sendResponse({ ok: true }); return false; }
+      if (message.type === "PRISM_READER_LAYOUT") {
+        readerFrame.style.height = `${Math.max(70, Math.min(300, Number(message.height) || 142))}px`;
+        sendResponse({ ok: true }); return false;
+      }
+      if (message.type === "PRISM_READER_STATE") {
+        if (!["loading", "playing", "paused", "idle", "error"].includes(message.state) || !Number.isFinite(message.progress)) {
+          sendResponse({ ok: false, error: "Invalid reading state." }); return false;
+        }
+        readerState = { kind: "reading", state: message.state === "idle" ? "done" : message.state, progress: Math.max(0, Math.min(1, message.progress)) };
+        renderOrb(); sendResponse({ ok: true }); return false;
+      }
+      if (message.type === "PRISM_READER_COLLAPSE") { setDockExpanded(false, true); sendResponse({ ok: true }); return false; }
+      if (message.type === "PRISM_READER_CLOSE") { closeReader(); sendResponse({ ok: true }); return false; }
+    }
+    if (message?.type === "PRISM_START_READING") {
+      openReader(message.action?.text, message.action?.type === "read-page");
+      sendResponse({ ok: true }); return false;
+    }
+    if (message?.type === "PRISM_READ") {
+      readSelectionOrPage(); sendResponse({ ok: true }); return false;
+    }
     if (message?.type === "PRISM_READING_COLLECT") { sendResponse(collectReading(message.selection)); return false; }
     if (message?.type === "PRISM_READING_HIGHLIGHT") { highlightReading(message); sendResponse({ ok: true }); return false; }
     if (message?.type === "PRISM_TRANSLATE_SELECTION") {
       const details = selectionDetails();
-      translateSelection(details?.text || lastSelection, details?.rect);
+      translateSelection(message.text || details?.text || lastSelection, details?.rect);
       sendResponse({ ok: true, hasSelection: Boolean(details?.text || lastSelection) });
+      return false;
+    }
+    if (message?.type === "PRISM_TRANSLATE") {
+      translateSelectionOrPage();
+      sendResponse({ ok: true });
       return false;
     }
     if (message?.type === "PRISM_TOGGLE_PAGE") {
@@ -686,7 +1025,9 @@
       return false;
     }
     if (message?.type === "PRISM_RESTORE_PAGE") {
+      stopPageTranslation();
       restorePage();
+      if (pageState) showPageStatus(label("已恢复原文", "Original restored"), 1);
       sendResponse({ ok: true });
       return false;
     }

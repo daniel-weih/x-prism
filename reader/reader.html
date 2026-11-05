@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prism · Read aloud</title>
+  <link rel="stylesheet" href="reader.css">
+</head>
+<body>
+  <section id="player" aria-label="Prism read aloud">
+    <header>
+      <img src="../assets/icon-32.png" alt="" width="19" height="19">
+      <div class="heading"><strong id="status" role="status">Prism</strong><span id="position"></span></div>
+      <button id="settings" class="icon" title="Settings" aria-label="Settings">⚙</button>
+      <button id="collapse" class="icon" title="Collapse to circle" aria-label="Collapse to circle">−</button>
+      <button id="close" class="icon" title="Stop and close" aria-label="Stop and close">×</button>
+    </header>
+    <p id="excerpt"></p>
+    <div class="controls">
+      <button id="previous" class="icon" aria-label="Previous section">‹</button>
+      <button id="toggle" disabled>…</button>
+      <button id="next" class="icon" aria-label="Next section">›</button>
+      <span class="spacer"></span>
+      <span id="ai-label">AI voice</span>
+      <select id="rate" aria-label="Playback speed">
+        <option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+      </select>
+    </div>
+    <progress id="progress" max="1" value="0" aria-label="Reading progress"></progress>
+  </section>
+  <script type="module" src="reader.js"></script>
+</body>
+</html>

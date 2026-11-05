@@ -120,6 +120,14 @@ test('Realtime uses ephemeral authentication, selected voice, completed PCM and 
  const v=new DataView(await blob.arrayBuffer());assert.equal(v.getUint32(24,true),24000);
 });
 test('PCM wave header includes exact data length',async()=>{const v=new DataView(await pcmWave([new Uint8Array(8)]).arrayBuffer());assert.equal(v.getUint32(40,true),8);});
+test('autoplay denial pauses the compact reader and Play reuses the generated audio',async()=>{
+ let calls=0,plays=0;
+ const a=audio();a.play=async()=>{if(++plays===1)throw new DOMException('User gesture required','NotAllowedError');};
+ const p=new SpeechPlayer({audio:a,synthesize:async()=>{calls++;return new Blob(['audio']);},urls:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}}});
+ await p.start([{text:'One.'}],settings);
+ assert.equal(p.state,'paused');assert.equal(calls,1);
+ await p.toggle();assert.equal(p.state,'playing');assert.equal(calls,1);assert.equal(plays,2);p.stop();
+});
 test('pausing while play is pending keeps paused state even when the browser rejects play',async()=>{
  let rejectPlay;const a=audio();a.play=()=>new Promise((_r,j)=>rejectPlay=j);
  const p=new SpeechPlayer({audio:a,synthesize:async()=>new Blob(['audio']),urls:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}}});

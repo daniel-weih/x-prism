@@ -117,43 +117,44 @@ test('panel ownership is explicit in its URL, with no accidental tab zero defaul
   for (const value of ['', '-1', 'NaN', '1.5']) assert.equal(panelTabId(`${base}?tabId=${value}`), null);
 });
 
-test('background prepares new/replaced tabs and routes context-menu and bubble actions to their source', async () => {
+test('background routes page actions to the source tab without automatically opening a side panel', async () => {
   const event = () => ({ listeners: [], addListener(fn) { this.listeners.push(fn); } });
-  const m = mockPanels();
-  const noEvent = event();
-  const runtime = { id: 'prism-test', onInstalled: noEvent, onStartup: noEvent, onMessage: event() };
+  const m = mockPanels(), sent = [], injected = [];
+  const runtime = { id: 'prism-test', onInstalled: event(), onStartup: event(), onMessage: event() };
   const contextMenus = { onClicked: event() }, commands = { onCommand: event() };
   let pageConnected = false;
-  const tabs = { ...m.api.tabs, onCreated: event(), onReplaced: event(), onRemoved: event(),
-    sendMessage(_id, _message, callback) {
-      runtime.lastError = pageConnected ? undefined : { message: 'No content script' };
-      callback(); runtime.lastError = undefined;
+  const tabs = { ...m.api.tabs, get: async id => ({ id }), onCreated: event(), onReplaced: event(), onRemoved: event(),
+    async sendMessage(id, message) {
+      if (!pageConnected) throw new Error('No content script');
+      sent.push({ id, message }); return { ok: true };
     }
   };
-  globalThis.chrome = { ...m.api, runtime, tabs, contextMenus, commands };
+  globalThis.chrome = { ...m.api, runtime, tabs, contextMenus, commands, scripting: {
+    insertCSS: async () => {}, executeScript: async ({ target }) => { injected.push(target.tabId); pageConnected = true; }
+  } };
   try {
     await import('../background.js?tab-panel-routing');
-    tabs.onCreated.listeners[0]({ id: 11 });
-    tabs.onCreated.listeners[0]({ id: 22 });
-    const listener = runtime.onMessage.listeners[0];
-    const response = await new Promise(resolve => {
-      assert.equal(listener({ type: 'PRISM_OPEN_PANEL', action: { type: 'selection', text: 'bubble' } }, { id: runtime.id, tab: { id: 11 } }, resolve), true);
-    });
-    assert.equal(response.ok, true);
-    assert.equal(m.stored[pendingActionKey(11)].text, 'bubble');
-    contextMenus.onClicked.listeners[0]({ menuItemId: 'prism-translate-selection', selectionText: 'context' }, { id: 22 });
-    await Promise.resolve();
-    assert.equal(m.stored[pendingActionKey(22)].text, 'context');
-    commands.onCommand.listeners[0]('toggle-page-translation', { id: 11 });
-    await Promise.resolve();
-    assert.equal(m.stored[pendingActionKey(11)].type, 'page');
-    const openCount = m.calls.filter(([type]) => type === 'open').length;
-    pageConnected = true;
-    commands.onCommand.listeners[0]('translate-selection', { id: 11 });
-    assert.equal(m.calls.filter(([type]) => type === 'open').length, openCount);
-    tabs.onReplaced.listeners[0](33, 22);
-    assert.ok(m.options.has(33)); assert.equal(m.stored[pendingActionKey(22)], undefined);
-    tabs.onRemoved.listeners[0](11);
-    assert.equal(m.stored[pendingActionKey(11)], undefined);
+    tabs.onCreated.listeners[0]({ id: 11 }); tabs.onCreated.listeners[0]({ id: 22 });
+    await contextMenus.onClicked.listeners[0]({ menuItemId: 'prism-translate-selection', selectionText: 'context' }, { id: 22 });
+    assert.deepEqual(injected, [22]); assert.equal(sent.at(-1).id, 22); assert.equal(sent.at(-1).message.text, 'context');
+    await commands.onCommand.listeners[0]('toggle-page-translation', { id: 11 });
+    assert.equal(sent.at(-1).id, 11); assert.equal(sent.at(-1).message.type, 'PRISM_TOGGLE_PAGE');
+    await commands.onCommand.listeners[0]('translate-selection', { id: 22 });
+    assert.equal(sent.at(-1).id, 22); assert.equal(sent.at(-1).message.type, 'PRISM_TRANSLATE');
+    await commands.onCommand.listeners[0]('read-selection-or-page', { id: 11 });
+    assert.equal(sent.at(-1).id, 11); assert.equal(sent.at(-1).message.type, 'PRISM_READ');
+    const count = sent.length;
+    await commands.onCommand.listeners[0]('unknown-command', { id: 22 });
+    await commands.onCommand.listeners[0]('translate-selection', undefined);
+    assert.equal(sent.length, count, 'Unknown commands or missing tabs must not translate an unrelated page');
+    await contextMenus.onClicked.listeners[0]({ menuItemId: 'prism-read-page' }, { id: 22 });
+    assert.equal(sent.at(-1).id, 22); assert.equal(sent.at(-1).message.type, 'PRISM_START_READING');
+    assert.equal(m.calls.filter(([type]) => type === 'open').length, 0);
+    // Settings and the explicit expand action still open the owning tab's panel.
+    const response = await new Promise(resolve => runtime.onMessage.listeners[0](
+      { type: 'PRISM_OPEN_PANEL', action: { type: 'settings' } }, { id: runtime.id, tab: { id: 11 } }, resolve));
+    assert.equal(response.ok, true); assert.equal(m.stored[pendingActionKey(11)].type, 'settings');
+    tabs.onReplaced.listeners[0](33, 22); assert.ok(m.options.has(33));
+    tabs.onRemoved.listeners[0](11); assert.equal(m.stored[pendingActionKey(11)], undefined);
   } finally { delete globalThis.chrome; }
 });

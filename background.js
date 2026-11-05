@@ -1,3 +1,4 @@
+import { runPageAction, relayReaderMessage, relayReaderControl } from "./shared/page-actions.js";
 import { PROVIDERS } from "./shared/config.js";
 import { addHistory, clearHistory, removeHistoryItem, toggleFavorite, ensureDefaults, getSettings } from "./shared/storage.js";
 import { lookupPronunciation } from "./shared/pronunciation.js";
@@ -37,27 +38,26 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 const openPanel = (tabId, action) => openTabPanel(chrome, tabId, action);
 
+async function pageActionStatus(tabId, failed) {
+  if (!Number.isSafeInteger(tabId) || !chrome.action) return;
+  await Promise.allSettled([
+    chrome.action.setBadgeText({ tabId, text: failed ? "!" : "" }),
+    chrome.action.setTitle({ tabId, title: failed ? "Prism: 请在普通网页中重试 / Try again on a regular web page." : "Open Prism" })
+  ]);
+}
+function dispatchPageAction(tabId, action) {
+  return runPageAction(chrome, tabId, action).then(() => pageActionStatus(tabId, false), () => pageActionStatus(tabId, true));
+}
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const action = info.menuItemId === CONTEXT_READ_SELECTION ? { type: "read-selection", text: info.selectionText || "" }
     : info.menuItemId === CONTEXT_READ_PAGE ? { type: "read-page" }
-    : info.menuItemId === CONTEXT_SELECTION
-    ? { type: "selection", text: info.selectionText || "" }
-    : { type: "page" };
-  openPanel(tab?.id, action).catch(() => {});
+    : info.menuItemId === CONTEXT_SELECTION ? { type: "selection", text: info.selectionText || "" } : { type: "page" };
+  return dispatchPageAction(tab?.id, action);
 });
-
 chrome.commands.onCommand.addListener((command, tab) => {
-  if (!tab?.id) return;
-  const type = command === "translate-selection"
-    ? "PRISM_TRANSLATE_SELECTION"
-    : "PRISM_TOGGLE_PAGE";
-  // Chrome's callback preserves the shortcut's user gesture for panel fallback.
-  chrome.tabs.sendMessage(tab.id, { type }, () => {
-    if (chrome.runtime.lastError) {
-      openPanel(tab.id, { type: command === "translate-selection" ? "selection" : "page" })
-        .catch((error) => console.error("Prism side panel open failed:", error.message));
-    }
-  });
+  const type = { "translate-selection": "translate", "read-selection-or-page": "read", "toggle-page-translation": "page" }[command];
+  if (!type || !Number.isSafeInteger(tab?.id) || tab.id < 0) return;
+  return dispatchPageAction(tab.id, { type });
 });
 
 function detectLanguage(text) {
@@ -168,6 +168,16 @@ async function assertOpenAiApiPermission(endpoint) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false;
+  if (message?.type === "PRISM_READER_CONTROL") {
+    relayReaderControl(chrome, sender, message).then(sendResponse)
+      .catch(() => sendResponse({ ok: false, error: "Reading controls unavailable." }));
+    return true;
+  }
+  if (message?.type === "PRISM_READER_PAGE") {
+    relayReaderMessage(chrome, sender, message).then(sendResponse)
+      .catch(() => sendResponse({ ok: false, error: "Reading page is no longer available." }));
+    return true;
+  }
   if (message?.type === "PRISM_OPENAI_MODELS" && sender.url?.startsWith(chrome.runtime.getURL(""))) {
     assertOpenAiApiPermission(message.endpoint)
       .then(() => listOpenAiApiModels({ openaiEndpoint: message.endpoint, openaiApiKey: message.apiKey }))

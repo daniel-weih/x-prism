@@ -1,5 +1,5 @@
 import { openaiApiUrl, openaiApiOrigin } from "./openai-api.js";
-// Speech runs in the extension side panel; credentials never enter page scripts.
+// Speech runs in extension-owned players; credentials never enter page scripts.
 export const SPEECH_MODELS = ["gpt-audio-1.5", "gpt-realtime-2.1", "gpt-realtime-2.1-mini"];
 export const speechOrigin = settings => openaiApiOrigin(settings.openaiEndpoint);
 export function speechVoices(model) {
@@ -295,7 +295,9 @@ export class SpeechPlayer {
       this.emit(); this.prefetch();
     } catch (error) { if (revision === this.revision && !(this.state === "paused" && error.name === "AbortError")) this.fail(error); }
   }
-  fail(error) { this.state = "error"; this.audio.pause(); this.cancelRequests(); this.emit(error.name === "TimeoutError" ? "语音生成超时，请重试 / Speech timed out. Retry." : error.message); }
+  fail(error) {
+    if (error.name === "NotAllowedError" && this.url) { this.state = "paused"; this.emit("点击播放继续 / Click Play to continue."); return; }
+    this.state = "error"; this.audio.pause(); this.cancelRequests(); this.emit(error.name === "TimeoutError" ? "语音生成超时，请重试 / Speech timed out. Retry." : error.message); }
   async toggle() {
     if (this.state === "playing" || this.state === "loading") { this.audio.pause(); this.state = "paused"; this.emit(); return; }
     if (this.state === "error") return this.load();

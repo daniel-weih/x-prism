@@ -166,6 +166,13 @@
         <label class="setting-row"><span><b data-i18n="saveHistorySetting">Save history</b><small data-i18n="saveHistoryHint">Stored only in this browser profile</small></span><input class="switch" id="save-history" type="checkbox"></label>
         <label class="setting-row range-row"><span><b data-i18n="pageLimit">Page segment limit</b><small id="page-limit-value">240</small></span><input id="page-limit" type="range" min="40" max="600" step="20"></label>
       </section>
+      <section class="section-card surface-card keyboard-settings">
+        <div class="section-heading"><div><h3 data-i18n="keyboardShortcuts">Keyboard shortcuts</h3><p data-i18n="keyboardShortcutsHint">Use the current selection, or the page. Press Read again to pause or resume.</p></div></div>
+        <div class="setting-row"><span><b data-i18n="shortcutSelection">Translate selection / page</b></span><kbd data-command="translate-selection">—</kbd></div>
+        <div class="setting-row"><span><b data-i18n="shortcutRead">Read / pause / resume</b></span><kbd data-command="read-selection-or-page">—</kbd></div>
+        <div class="setting-row"><span><b data-i18n="shortcutPage">Translate / restore page</b></span><kbd data-command="toggle-page-translation">—</kbd></div>
+        <button class="secondary-button" id="configure-shortcuts" type="button" data-i18n="configureShortcuts">Change shortcuts</button>
+      </section>
       <p class="privacy-note"><span>◇</span><span data-i18n="keysPrivacy">API keys are kept in local extension storage and never synced by Prism.</span></p>
     </section>
     <section id="reader-player" class="surface-card reader-player" hidden aria-label="Read aloud player">

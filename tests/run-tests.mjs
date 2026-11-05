@@ -24,6 +24,7 @@ assert.equal(manifest.side_panel, undefined, "Do not register a window-wide side
 const referencedPaths = [
   manifest.background.service_worker,
   SIDE_PANEL_PATH,
+  ...(manifest.web_accessible_resources || []).flatMap(entry => entry.resources),
   ...Object.values(manifest.icons),
   ...Object.values(manifest.action.default_icon),
   ...manifest.content_scripts.flatMap((entry) => [...entry.js, ...entry.css])

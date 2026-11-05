@@ -54,7 +54,14 @@
         "default": "Alt+Shift+T",
         "mac": "Alt+Shift+T"
       },
-      "description": "Translate the selected text"
+      "description": "Translate selected text, or the page when nothing is selected"
+    },
+    "read-selection-or-page": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Read selected text or the page; pause or resume current reading"
     },
     "toggle-page-translation": {
       "suggested_key": {
@@ -69,5 +76,16 @@
     "32": "assets/icon-32.png",
     "48": "assets/icon-48.png",
     "128": "assets/icon-128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "reader/reader.html"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ]
 }

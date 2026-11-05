@@ -37,13 +37,15 @@ Kimi offers two independent modes. **Local CLI** uses the installed Kimi Code lo
 
 ## OpenAI read aloud
 
+Page-initiated reading uses an extension-owned iframe in the bottom-right corner. API keys stay inside the extension context; page scripts receive neither keys nor audio. The iframe relays only its own tab’s reading state and highlight controls. Closing it or leaving the page stops playback. Page translation and selection translation do not automatically open the side panel.
+
 Read aloud shares the endpoint and API key configured for OpenAI translation. Starting reading sends the requested word, selected passage, input text, translation, or extracted article body to that service; preview sends a fixed sample sentence. This also applies when the translation engine is Chrome Local AI. Speech is AI-generated and API usage is billed by the configured service.
 
 The shared OpenAI API key stays in `chrome.storage.local`, excluded from sync. There is no separate reading credential. Chat audio uses the exact configured translation endpoint. Realtime is currently supported only with the official OpenAI endpoint; custom-service credentials are never forwarded to OpenAI. No key is passed to page scripts, included in a URL, or stored with audio. Chat audio requests use `store: false`, omit cookies and reject redirects. Realtime uses a short-lived client secret for WebSocket authentication. OpenAI's retention policies still apply.
 
 For every speech chunk, Prism checks the model-reported audio transcript against the source before playback and rejects missing or mismatched transcripts. Paragraph checks ignore differences in casing, whitespace and punctuation; spoken rewrites of numbers or symbols can still be rejected. This is not independent audio recognition; no additional transcription service is called. Realtime requests carry explicit reading instructions and only the current script, without conversation history.
 
-Each synthesis request contains text from one source paragraph. Long paragraphs can be split into multiple clips; adjacent paragraphs are not combined. Audio is held only in side-panel memory, targeting an estimated 25-second playback window with at most two synthesis requests in flight and at most four future chunks plus the current chunk retained. Pausing prevents new prefetch requests while allowing already-started requests to complete. Reading text and audio are not added to translation history or persistent caches. Stop, page navigation and closing the panel release playback resources and cancel pending work; requests already processed by OpenAI may still incur usage.
+Each synthesis request contains text from one source paragraph. Long paragraphs can be split into multiple clips; adjacent paragraphs are not combined. Audio is held only in player memory, targeting an estimated 25-second playback window with at most two synthesis requests in flight and at most four future chunks plus the current chunk retained. Pausing prevents new prefetch requests while allowing already-started requests to complete. Reading text and audio are not added to translation history or persistent caches. Stop, page navigation and closing the panel release playback resources and cancel pending work; requests already processed by OpenAI may still incur usage.
 
 ## Page access
 
