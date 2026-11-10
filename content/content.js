@@ -44,6 +44,7 @@
   let lastSelection = "";
   let lastSelectionRect = null;
   let lastPointerAnchor = null;
+  let bubbleDrag = null;
   let hideTimer;
   let selectionRequest = 0;
   let pageTranslationPending = false;
@@ -73,7 +74,8 @@
       .bubble { --menu-bg:#fff; --menu-text:#30343b; --menu-muted:#737983; --menu-border:#e3e5e8; --menu-hover:#f1f3f5; --menu-active:#e8ebef; --menu-shadow:0 2px 4px #18202d08,0 6px 20px #18202d12;
         position:fixed; display:none; align-items:center; gap:2px; max-width:calc(100vw - 24px); pointer-events:auto; padding:3px; border:1px solid var(--menu-border); border-radius:8px; color:var(--menu-text); font:500 12px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--menu-bg); box-shadow:var(--menu-shadow); color-scheme:light; }
       .bubble.dark { --menu-bg:#292b2f; --menu-text:#e8eaed; --menu-muted:#a8adb7; --menu-border:#41444a; --menu-hover:#383b41; --menu-active:#454951; --menu-shadow:0 2px 4px #0002,0 6px 20px #0003; color-scheme:dark; }
-      .bubble-brand { display:grid; place-items:center; flex-shrink:0; width:24px; height:28px; margin-left:3px; color:var(--menu-text); }
+      .bubble-brand { display:grid; place-items:center; flex-shrink:0; width:24px; height:28px; margin-left:3px; color:var(--menu-text); cursor:grab; touch-action:none; user-select:none; }
+      .bubble.dragging,.bubble.dragging .bubble-brand { cursor:grabbing; }
       .bubble-brand svg { display:block; width:18px; height:18px; }
       .bubble-action { display:flex; align-items:center; justify-content:center; gap:6px; min-width:0; min-height:28px; padding:0 9px; border:0; border-radius:5px; background:transparent; color:inherit; cursor:pointer; white-space:nowrap; transition:background-color .12s; }
       .bubble-action:hover { background:var(--menu-hover); }
@@ -169,6 +171,7 @@
   (document.documentElement || document.body).appendChild(host);
 
   const bubble = shadow.querySelector(".bubble");
+  const bubbleHandle = shadow.querySelector(".bubble-brand");
   const card = shadow.querySelector(".card");
   const sourceNode = shadow.querySelector(".source");
   const resultNode = shadow.querySelector(".result");
@@ -295,6 +298,8 @@
 
   function localizeControls() {
     bubble.setAttribute("aria-label", label("选中文字操作", "Selected text actions"));
+    bubbleHandle.title = label("按住拖动", "Drag to move");
+    bubbleHandle.setAttribute("aria-label", `Prism · ${bubbleHandle.title}`);
     shadow.querySelector(".bubble-translate span").textContent = label("翻译", "Translate");
     shadow.querySelector(".bubble-read span").textContent = label("朗读", "Read aloud");
     for (const [selector, zh, en] of [[".bubble-translate", "翻译选中文字", "Translate selection"], [".bubble-read", "朗读选中文字", "Read selected text"]]) {
@@ -339,6 +344,7 @@
     readerFrame = null; readerSession = null; readerRequest = null;
     clearTimeout(hideTimer);
     clearTimeout(selectionTimer);
+    endBubbleDrag();
     listeners.abort();
     try { runtime.onMessage.removeListener(onRuntimeMessage); } catch { /* old context */ }
     try { storage.onChanged.removeListener(onSettingsChanged); } catch { /* old context */ }
@@ -436,7 +442,14 @@
     element.style.top = `${Math.max(10, Math.min(innerHeight - height - 10, top))}px`;
   }
 
-  function hideBubble() { bubble.style.display = "none"; }
+  function endBubbleDrag() {
+    const drag = bubbleDrag;
+    bubbleDrag = null;
+    bubble.classList.remove("dragging");
+    if (drag && bubbleHandle.hasPointerCapture(drag.pointerId)) bubbleHandle.releasePointerCapture(drag.pointerId);
+  }
+
+  function hideBubble() { endBubbleDrag(); bubble.style.display = "none"; }
   function selectionMenuDark() {
     if (settings.theme === "dark" || settings.theme === "light") return settings.theme === "dark";
     // Match the selected passage's surface, which may differ from the OS theme.
@@ -692,6 +705,29 @@
   }
   // Keep the webpage selection intact while pressing either action.
   listen(bubble, "mousedown", event => event.preventDefault());
+  listen(bubbleHandle, "pointerdown", event => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    event.preventDefault();
+    clearTimeout(selectionTimer);
+    const rect = bubble.getBoundingClientRect();
+    bubbleHandle.setPointerCapture(event.pointerId);
+    bubbleDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    bubble.classList.add("dragging");
+  });
+  listen(bubbleHandle, "pointermove", event => {
+    if (!bubbleDrag || event.pointerId !== bubbleDrag.pointerId) return;
+    event.preventDefault();
+    const left = bubbleDrag.left + event.clientX - bubbleDrag.x;
+    const top = bubbleDrag.top + event.clientY - bubbleDrag.y;
+    bubble.style.left = `${Math.max(12, Math.min(innerWidth - bubble.offsetWidth - 12, left))}px`;
+    bubble.style.top = `${Math.max(10, Math.min(innerHeight - bubble.offsetHeight - 10, top))}px`;
+  });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    listen(bubbleHandle, type, event => {
+      if (event.pointerId === bubbleDrag?.pointerId) endBubbleDrag();
+    });
+  }
+  listen(window, "blur", endBubbleDrag);
   listen(shadow.querySelector(".bubble-translate"), "click", () => translateSelection(lastSelection, lastSelectionRect));
   listen(shadow.querySelector(".bubble-read"), "click", () => {
     const text = lastSelection;
