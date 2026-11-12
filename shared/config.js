@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   openaiApiKey: "",
   openaiModel: "gpt-4.1-mini",
   openaiReasoningEffort: "",
+  openaiFastMode: false,
   codexModel: "",
   codexReasoningEffort: "",
   kimiConnection: "cli",
@@ -120,6 +121,7 @@ export function normalizeSettings(value = {}) {
     merged.openaiConnection = value.provider === "openai" ? "api" : DEFAULT_SETTINGS.openaiConnection;
   }
   if (!OPENAI_REASONING_EFFORTS.includes(merged.openaiReasoningEffort)) merged.openaiReasoningEffort = "";
+  merged.openaiFastMode = merged.openaiFastMode === true;
   // Retired provider settings must not leak back into sync when splitting secrets.
   for (const key of ["deeplApiKey", "deeplUseFree", "libreEndpoint", "libreApiKey"]) delete merged[key];
   if (!["cli", "api"].includes(merged.kimiConnection)) merged.kimiConnection = "cli";

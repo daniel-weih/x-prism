@@ -75,6 +75,8 @@ Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字�
 
 Chrome 会请求访问所配置域名的权限。远程接口必须使用 HTTPS，本机服务可使用 HTTP。请求不携带浏览器 Cookie，并拒绝重定向。API 凭据与 Codex CLI 登录独立。
 
+**Fast 模式**默认关闭，适用于[官方 Fast 定价表](https://developers.openai.com/api/docs/pricing)中已确认支持的 OpenAI 文本模型。开启后请求更快的 API 翻译，费用更高，实际处理取决于服务可用性；不支持或未识别的模型无法开启。自定义兼容接口还需服务商支持。关闭后，官方 API 使用标准档位，兼容接口沿用服务商默认档位。此设置仅作用于 API 翻译，与推理强度独立，不改变 CLI 翻译和朗读。
+
 ### 本机 CLI 连接器
 
 可选的 Codex 和 Kimi 连接器需要 macOS 或 Linux、Node.js 20+，以及已安装并登录的 CLI。它们使用云端模型服务，不是离线推理；目前没有 Windows 安装脚本。

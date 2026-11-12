@@ -1,7 +1,7 @@
 import { createReader } from "./reader.js";
 import { LANGUAGES, OPENAI_REASONING_EFFORTS, PROVIDERS } from "../shared/config.js";
 import { kimiApiBase, kimiThinkingOptions } from "../shared/kimi-api.js";
-import { openaiApiOrigin } from "../shared/openai-api.js";
+import { openaiApiOrigin, supportsOpenAiFast } from "../shared/openai-api.js";
 import { panelTabId, pendingActionKey } from "../shared/side-panel.js";
 import {
   ensureDefaults,
@@ -45,6 +45,10 @@ const copy = {
     openaiApiHint: "Use an API key independently of your Codex CLI login. OpenAI-compatible services are also supported.",
     openaiApiSelect: "Enter the API endpoint, API key and model first.",
     openaiModelHint: "Choose a text chat model. If model detection is unavailable, enter the model ID manually.",
+    openaiFastMode: "Fast mode",
+    openaiFastHint: "Faster API translation at a higher price. Off uses Standard processing. Actual speed depends on service availability.",
+    openaiFastCompatibleHint: "Faster API translation at a higher price. Your provider must support Fast; when off, its default tier applies.",
+    openaiFastUnavailable: "Fast support is not confirmed for this model. Choose a supported OpenAI text model.",
     openaiEffortDefault: "Unspecified (model default)", openaiEffortNone: "none (reasoning off)",
     openaiEffortHint: "Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.",
     kimiConnection: "Connection", kimiCli: "Local CLI", kimiApi: "Open Platform API",
@@ -107,6 +111,10 @@ const copy = {
     openaiApiHint: "使用 API Key，与 Codex CLI 登录独立；也支持 OpenAI 兼容服务。",
     openaiApiSelect: "请先填写 API 接口地址、API Key 和模型。",
     openaiModelHint: "请选择支持文本对话的模型；接口不支持检测时可手动填写模型 ID。",
+    openaiFastMode: "Fast 模式",
+    openaiFastHint: "加快 API 翻译，费用更高。关闭后使用标准档位，实际速度取决于服务可用性。",
+    openaiFastCompatibleHint: "加快 API 翻译，费用更高。需接口服务商支持 Fast；关闭后沿用服务商默认档位。",
+    openaiFastUnavailable: "尚未确认此模型支持 Fast，请选择支持的 OpenAI 文本模型。",
     openaiEffortDefault: "不指定（模型默认）", openaiEffortNone: "none（关闭推理）",
     openaiEffortHint: "不指定时使用模型默认值。各档位（含 none）需模型支持；非推理模型请选择“不指定”。",
     kimiConnection: "接入方式", kimiCli: "本机 CLI", kimiApi: "开放平台 API",
@@ -294,6 +302,8 @@ function fillSettingsForm(values = settings) {
   $("#openai-endpoint").value = values.openaiEndpoint;
   $("#openai-key").value = values.openaiApiKey;
   $("#openai-model").value = values.openaiModel;
+  $("#openai-fast").checked = values.openaiFastMode === true;
+  updateOpenAiFast();
   $("#openai-effort").replaceChildren(
     new Option(t("openaiEffortDefault"), ""),
     ...OPENAI_REASONING_EFFORTS.map((effort) => new Option(effort === "none" ? t("openaiEffortNone") : effort, effort))
@@ -377,6 +387,16 @@ function updateOpenAiConnection() {
   $("#openai-api-config").hidden = cli;
 }
 
+function updateOpenAiFast() {
+  const supported = supportsOpenAiFast($("#openai-model").value);
+  const toggle = $("#openai-fast");
+  toggle.disabled = !supported;
+  if (!supported) toggle.checked = false;
+  let official = false;
+  try { official = new URL($("#openai-endpoint").value).origin === "https://api.openai.com"; } catch { /* Incomplete input. */ }
+  $("#openai-fast-hint").textContent = t(!supported ? "openaiFastUnavailable" : official ? "openaiFastHint" : "openaiFastCompatibleHint");
+}
+
 function invalidateOpenAiApiModels() {
   openaiApiRequest++;
   $("#openai-api-models").replaceChildren();
@@ -410,6 +430,7 @@ function openaiSettingsDraft() {
     openaiApiKey: $("#openai-key").value.trim(),
     openaiModel: $("#openai-model").value.trim(),
     openaiReasoningEffort: $("#openai-effort").value,
+    openaiFastMode: !$("#openai-fast").disabled && $("#openai-fast").checked,
     codexModel: $("#codex-model").value,
     codexReasoningEffort: $("#codex-effort").value
   };
@@ -418,7 +439,7 @@ function openaiSettingsDraft() {
 function hasUnsavedOpenAiSettings() {
   if (selectedProvider !== "openai") return false;
   const draft = openaiSettingsDraft();
-  const keys = draft.openaiConnection === "cli" ? ["codexModel", "codexReasoningEffort"] : ["openaiEndpoint", "openaiApiKey", "openaiModel", "openaiReasoningEffort"];
+  const keys = draft.openaiConnection === "cli" ? ["codexModel", "codexReasoningEffort"] : ["openaiEndpoint", "openaiApiKey", "openaiModel", "openaiReasoningEffort", "openaiFastMode"];
   return settings.provider !== "openai" || ["openaiConnection", ...keys].some((key) => draft[key] !== settings[key]);
 }
 
@@ -959,6 +980,8 @@ function wireEvents() {
   $("#openai-connection").addEventListener("change", updateOpenAiConnection);
   $("#openai-api-connect").addEventListener("click", detectOpenAiApi);
   $("#openai-endpoint").addEventListener("input", invalidateOpenAiApiModels);
+  $("#openai-endpoint").addEventListener("input", updateOpenAiFast);
+  $("#openai-model").addEventListener("input", updateOpenAiFast);
   $("#openai-key").addEventListener("input", invalidateOpenAiApiModels);
   $("#kimi-connection").addEventListener("change", updateKimiConnection);
   $("#kimi-cli-connect").addEventListener("click", detectKimiCli);

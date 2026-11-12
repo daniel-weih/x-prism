@@ -121,6 +121,7 @@
             <p class="connection-status" id="openai-api-status" role="status"></p>
             <label><span data-i18n="model">Model</span><input id="openai-model" type="text" list="openai-api-models" autocomplete="off" spellcheck="false" data-i18n-placeholder="kimiModelHint" placeholder="Detect models or enter a model ID"><datalist id="openai-api-models"></datalist></label>
             <p class="config-hint" data-i18n="openaiModelHint">Choose a text chat model. If model detection is unavailable, enter the model ID manually.</p>
+            <label class="setting-row fast-setting"><span><b data-i18n="openaiFastMode">Fast mode</b><small id="openai-fast-hint"></small></span><input class="switch" id="openai-fast" type="checkbox" aria-describedby="openai-fast-hint"></label>
             <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="openai-effort" aria-describedby="openai-effort-hint"></select></label>
             <p class="config-hint" id="openai-effort-hint" data-i18n="openaiEffortHint">Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.</p>
           </div>

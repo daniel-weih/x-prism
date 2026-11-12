@@ -1,3 +1,25 @@
+// Text models listed in OpenAI's Fast pricing table, verified 2026-11-11.
+// https://developers.openai.com/api/docs/pricing#latest-models
+// Keep an explicit list: new GPT families, fine-tunes and audio models are not implied.
+const FAST_MODELS = new Set([
+  "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna", "gpt-6-sol",
+  "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4",
+  "gpt-5.4-mini", "gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini",
+  "gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini", "o3"
+]);
+
+export function supportsOpenAiFast(model) {
+  return FAST_MODELS.has(String(model || "").trim().replace(/-\d{4}-\d{2}-\d{2}$/, ""));
+}
+
+export function openAiServiceTier(settings) {
+  if (!supportsOpenAiFast(settings.openaiModel)) return undefined;
+  if (settings.openaiFastMode === true) return "fast";
+  // Explicitly disable project-level Fast defaults on the official API.
+  // Compatible providers keep their existing behavior when the switch is off.
+  return openaiApiUrl(settings.openaiEndpoint).origin === "https://api.openai.com" ? "default" : undefined;
+}
+
 export function openaiApiUrl(value) {
   let url;
   try { url = new URL(String(value || "").trim()); }
@@ -39,6 +61,12 @@ async function request(url, key, body, fetcher = fetch) {
       throw new Error("OpenAI API 无法连接，请检查接口地址、网络及重定向设置。");
     }
     if (!response.ok) {
+      if (response.status === 400 && body?.service_tier === "fast") {
+        const detail = await response.json().catch(() => null);
+        if (detail?.error?.param === "service_tier" || /service_tier/i.test(String(detail?.error?.message || ""))) {
+          throw new Error("当前模型或接口不接受 Fast 模式，请关闭 Fast 后重试 / This model or endpoint rejected Fast mode. Turn Fast off and retry.");
+        }
+      }
       if (response.status === 401) throw new Error("OpenAI API Key 无效，请确认 Key 与接口地址匹配。");
       if (response.status === 403) throw new Error("OpenAI API 访问被拒绝，请检查密钥权限。");
       if (response.status === 429) throw new Error("OpenAI API 请求受限或额度不足，请稍后重试并检查账户额度。");
@@ -72,11 +100,13 @@ export async function translateOpenAiApi(texts, source, target, settings, fetche
   const endpoint = openaiApiUrl(settings.openaiEndpoint).href;
   const model = String(settings.openaiModel || "").trim();
   if (!model) throw new Error("请选择或填写 OpenAI API 模型。");
+  const serviceTier = openAiServiceTier(settings);
   const translations = [];
   for (let index = 0; index < texts.length; index += 20) {
     const group = texts.slice(index, index + 20);
     const result = await request(endpoint, settings.openaiApiKey, {
       model, stream: false,
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
       ...(settings.openaiReasoningEffort ? { reasoning_effort: settings.openaiReasoningEffort } : {}),
       // Leave temperature unset: reasoning models may reject a custom value.
       messages: [

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeSettings } from '../shared/config.js';
 import { ensureDefaults, getSettings, saveSettings } from '../shared/storage.js';
-import { listOpenAiApiModels, translateOpenAiApi, parseOpenAiTranslations, openaiApiOrigin } from '../shared/openai-api.js';
+import { listOpenAiApiModels, translateOpenAiApi, parseOpenAiTranslations, openaiApiOrigin, supportsOpenAiFast } from '../shared/openai-api.js';
 
 const api = { openaiEndpoint: 'https://api.openai.com/v1/chat/completions', openaiApiKey: 'test-only-key', openaiModel: 'test-chat-model' };
 const jsonResponse = (body, status = 200) => ({ ok: status === 200, status, json: async () => body });
@@ -21,12 +21,16 @@ test('legacy Codex and API selections migrate to distinct OpenAI modes without c
       assert.equal(migrated.openaiModel, api.openaiModel); assert.equal(migrated.openaiEndpoint, api.openaiEndpoint);
       assert.equal(migrated.openaiApiKey, api.openaiApiKey);
       assert.equal(migrated.openaiReasoningEffort, '');
-      await saveSettings({ openaiReasoningEffort: 'none' });
+      assert.equal(migrated.openaiFastMode, false);
+      await saveSettings({ openaiReasoningEffort: 'none', openaiFastMode: true });
       await saveSettings({ openaiConnection: mode === 'cli' ? 'api' : 'cli' });
       const switched = await getSettings();
       assert.notEqual(switched.openaiConnection, mode);
       assert.equal(switched.codexModel, 'saved-cli'); assert.equal(switched.openaiModel, api.openaiModel);
       assert.equal(switched.codexReasoningEffort, 'low'); assert.equal(switched.openaiReasoningEffort, 'none');
+      assert.equal(switched.openaiFastMode, true);
+      await saveSettings({ openaiFastMode: false });
+      assert.equal((await getSettings()).openaiFastMode, false);
       assert.ok(!JSON.stringify(memory.sync).includes(api.openaiApiKey));
       assert.equal(memory.local.prismSecrets.openaiApiKey, api.openaiApiKey);
       assert.deepEqual(memory.local.prismHistory, [{ id: 'keep-history' }]);
@@ -36,6 +40,45 @@ test('legacy Codex and API selections migrate to distinct OpenAI modes without c
   assert.equal(normalizeSettings({ openaiReasoningEffort: 'invalid' }).openaiReasoningEffort, '');
   assert.equal(normalizeSettings({ provider: 'openai', openaiConnection: 'cli' }).openaiConnection, 'cli');
   assert.equal(normalizeSettings({ provider: 'kimi', kimiConnection: 'api' }).provider, 'kimi');
+});
+
+test('Fast is opt-in for documented text models and controls every translation batch', async () => {
+  for (const model of ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra', 'gpt-5.6-luna', 'gpt-4.1-mini-2025-04-14', 'o3']) assert.equal(supportsOpenAiFast(model), true);
+  for (const model of ['', 'gpt-99', 'gpt-5-nano', 'gpt-5-pro', 'gpt-audio-1.5', 'gpt-realtime-2.1', 'ft:gpt-4.1:example', 'gpt-4.1-other', 'kimi-k3']) assert.equal(supportsOpenAiFast(model), false);
+  assert.equal(normalizeSettings({ openaiFastMode: 'false' }).openaiFastMode, false);
+  const cases = [
+    [{ openaiModel: 'gpt-6.1-sol', openaiFastMode: true }, 'fast'],
+    [{ openaiModel: 'gpt-4.1-mini-2025-04-14', openaiFastMode: true }, 'fast'],
+    [{ openaiModel: 'gpt-6.1-sol', openaiFastMode: false }, 'default'],
+    [{ openaiModel: 'gpt-6.1-sol' }, 'default'],
+    [{ openaiModel: 'gpt-6.1-sol', openaiFastMode: true, openaiEndpoint: 'https://proxy.example/v1/chat/completions' }, 'fast'],
+    [{ openaiModel: 'gpt-6.1-sol', openaiFastMode: false, openaiEndpoint: 'https://proxy.example/v1/chat/completions' }, undefined],
+    [{ openaiModel: 'gpt-99', openaiFastMode: true }, undefined],
+    [{ openaiModel: 'kimi-k3', openaiFastMode: true }, undefined]
+  ];
+  for (const [patch, expectedTier] of cases) {
+    let calls = 0;
+    const result = await translateOpenAiApi(Array(21).fill('hello'), 'en', 'zh', { ...api, ...patch, openaiReasoningEffort: 'low' }, async (_url, init) => {
+      calls++;
+      const body = JSON.parse(init.body);
+      assert.equal(body.service_tier, expectedTier);
+      assert.equal(body.reasoning_effort, 'low');
+      return jsonResponse({ service_tier: 'default', choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(JSON.parse(body.messages[1].content).map(() => '你好')) } }] });
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.length, 21, 'A server-side downgrade still returns the translation');
+  }
+});
+
+test('Fast rejection is actionable, redacts provider details, and never silently retries', async () => {
+  for (const error of [{ param: 'service_tier', message: 'private-key-must-not-leak' }, { message: 'Unsupported service_tier: private-key-must-not-leak' }]) {
+    let calls = 0;
+    await assert.rejects(translateOpenAiApi(['hello'], 'en', 'zh', { ...api, openaiModel: 'gpt-6.1-sol', openaiFastMode: true, openaiReasoningEffort: 'high' }, async () => {
+      calls++;
+      return jsonResponse({ error }, 400);
+    }), e => /关闭 Fast/.test(e.message) && !e.message.includes('private-key'));
+    assert.equal(calls, 1);
+  }
 });
 
 test('API model discovery uses the selected endpoint and key, supports a custom base path and deduplicates model IDs', async () => {
@@ -110,7 +153,7 @@ test('API endpoint and credential validation prevent unsafe requests; provider e
 test('background uses saved OpenAI mode for all translation callers, honors legacy IDs and restricts model discovery', async () => {
   const noEvent = { addListener() {} };
   let listener, permit = true, apiCalls = 0, nativePayload;
-  const saved = { provider: 'openai', openaiConnection: 'cli', codexModel: 'saved-cli', codexReasoningEffort: 'low', openaiReasoningEffort: 'none', ...api };
+  const saved = { provider: 'openai', openaiConnection: 'cli', codexModel: 'saved-cli', codexReasoningEffort: 'low', openaiReasoningEffort: 'none', ...api, openaiModel: 'gpt-6.1-sol', openaiFastMode: true };
   const originalFetch = globalThis.fetch;
   globalThis.chrome = {
     runtime: { id: 'prism-test', getURL: path => `chrome-extension://prism-test/${path}`, onInstalled: noEvent, onStartup: noEvent,
@@ -129,16 +172,17 @@ test('background uses saved OpenAI mode for all translation callers, honors lega
     apiCalls++; assert.equal(init.headers.Authorization, 'Bearer test-only-key');
     if (url.endsWith('/models')) return jsonResponse({ data: [{ id: 'account-model' }] });
     assert.equal(JSON.parse(init.body).reasoning_effort, 'none');
+    assert.equal(JSON.parse(init.body).service_tier, 'fast');
     return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: '["API 译文"]' } }] });
   };
   try {
     await import('../background.js');
     const sender = { id: 'prism-test', url: 'https://example.test/page' };
-    const message = { type: 'PRISM_REMOTE_TRANSLATE', provider: 'openai', texts: ['hello'], sourceLanguage: 'en', targetLanguage: 'zh', connection: 'api', apiKey: 'ignored-message-key', reasoningEffort: 'high' };
+    const message = { type: 'PRISM_REMOTE_TRANSLATE', provider: 'openai', texts: ['hello'], sourceLanguage: 'en', targetLanguage: 'zh', connection: 'api', apiKey: 'ignored-message-key', reasoningEffort: 'high', openaiFastMode: false };
     const send = (msg = message, from = sender) => new Promise(resolve => assert.equal(listener(msg, from, resolve), true));
     assert.deepEqual(await send(), { ok: true, translations: ['CLI 译文'] });
     assert.equal(nativePayload.model, 'saved-cli'); assert.equal(nativePayload.effort, 'low');
-    assert.equal(nativePayload.apiKey, undefined); assert.equal(apiCalls, 0);
+    assert.equal(nativePayload.apiKey, undefined); assert.equal(nativePayload.service_tier, undefined); assert.equal(apiCalls, 0);
     saved.openaiConnection = 'api'; message.connection = 'cli';
     assert.deepEqual(await send(), { ok: true, translations: ['API 译文'] });
     permit = false;

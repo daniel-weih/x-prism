@@ -75,6 +75,8 @@ Use **Detect connection and refresh models** to load the service's model list, o
 
 Chrome asks for access to the configured origin. Remote endpoints must use HTTPS; localhost services may use HTTP. Requests omit browser cookies and reject redirects. API credentials are separate from a Codex CLI login.
 
+**Fast mode** is off by default and available for OpenAI text models in the [documented Fast pricing table](https://developers.openai.com/api/docs/pricing). It requests faster API translation at a higher price; actual processing depends on service availability. Unsupported or unrecognized models cannot enable it. Custom compatible endpoints must also support Fast. Turning it off selects Standard on the official API and leaves compatible providers at their default tier. This setting applies to API translation, independently of reasoning effort, and does not change CLI translation or read aloud.
+
 ### Local CLI Connectors
 
 The optional Codex and Kimi connectors require macOS or Linux, Node.js 20+, and an installed, signed-in CLI. They use cloud model services, not offline inference. Windows installation scripts are not provided.
