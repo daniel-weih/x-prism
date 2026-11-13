@@ -1,6 +1,6 @@
 {
   "name": "prism-translate",
-  "version": "1.6.0",
+  "version": "1.7.2",
   "description": "Prism: web translation and AI read aloud with selectable OpenAI models and voices.",
   "private": true,
   "type": "module",

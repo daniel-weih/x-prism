@@ -1,6 +1,6 @@
 import { createReader } from "./reader.js";
 import { LANGUAGES, OPENAI_REASONING_EFFORTS, PROVIDERS } from "../shared/config.js";
-import { kimiApiBase, kimiThinkingOptions } from "../shared/kimi-api.js";
+import { kimiApiSettings, kimiApiBase, kimiThinkingOptions } from "../shared/kimi-api.js";
 import { openaiApiOrigin, supportsOpenAiFast } from "../shared/openai-api.js";
 import { panelTabId, pendingActionKey } from "../shared/side-panel.js";
 import {
@@ -51,7 +51,7 @@ const copy = {
     openaiFastUnavailable: "Fast support is not confirmed for this model. Choose a supported OpenAI text model.",
     openaiEffortDefault: "Unspecified (model default)", openaiEffortNone: "none (reasoning off)",
     openaiEffortHint: "Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.",
-    kimiConnection: "Connection", kimiCli: "Local CLI", kimiApi: "Open Platform API",
+    kimiConnection: "Connection", kimiCli: "Local CLI", kimiApi: "Open Platform API", kimiCode: "Kimi Code Subscription API", kimiCodeCn: "China · api.kimi.com", kimiCodeGlobal: "International · api.kimi.ai", kimiCodeHint: "Uses a Kimi Code subscription key and membership quota, separately from the Open Platform. Intended for coding; availability depends on your membership and client support.",
     kimiCliHint: "Uses your local Kimi Code login and cloud service; this is not offline inference. Thinking follows your CLI configuration.",
     kimiApiHint: "Use a Kimi Open Platform API key, billed separately from your Kimi Code subscription.",
     kimiSetupHint: "Run this once in the Prism project folder, then detect the connection. Requires Node.js and a signed-in Kimi Code CLI.",
@@ -117,7 +117,7 @@ const copy = {
     openaiFastUnavailable: "尚未确认此模型支持 Fast，请选择支持的 OpenAI 文本模型。",
     openaiEffortDefault: "不指定（模型默认）", openaiEffortNone: "none（关闭推理）",
     openaiEffortHint: "不指定时使用模型默认值。各档位（含 none）需模型支持；非推理模型请选择“不指定”。",
-    kimiConnection: "接入方式", kimiCli: "本机 CLI", kimiApi: "开放平台 API",
+    kimiConnection: "接入方式", kimiCli: "本机 CLI", kimiApi: "开放平台 API", kimiCode: "Kimi Code 订阅 API", kimiCodeCn: "国内 · api.kimi.com", kimiCodeGlobal: "国际 · api.kimi.ai", kimiCodeHint: "使用 Kimi Code 订阅 Key 与会员额度，与开放平台独立。订阅权益面向编程场景，实际可用性取决于账号权益和客户端支持。",
     kimiCliHint: "复用本机 Kimi Code 登录和云端模型服务，并非离线推理。思考强度沿用 CLI 配置。",
     kimiApiHint: "使用 Kimi 开放平台 API Key，与 Kimi Code 订阅分别计费。",
     kimiSetupHint: "在 Prism 项目目录中执行一次下面的命令，再检测连接。需要 Node.js 和已登录的 Kimi Code CLI。",
@@ -319,6 +319,10 @@ function fillSettingsForm(values = settings) {
   $("#kimi-api-key").value = values.kimiApiKey;
   $("#kimi-api-model").value = values.kimiApiModel;
   populateKimiThinking(values.kimiApiThinking);
+  $("#kimi-code-region").value = values.kimiCodeRegion;
+  $("#kimi-code-key").value = values.kimiCodeKey;
+  $("#kimi-code-model").value = values.kimiCodeModel;
+  populateKimiThinking(values.kimiCodeThinking, "code");
   $("#kimi-install-command").textContent = `node scripts/install-kimi-host.mjs ${chrome.runtime.id}`;
   if (!$("#kimi-cli-status").textContent) $("#kimi-cli-status").textContent = t("codexNotChecked");
   updateKimiConnection();
@@ -446,7 +450,10 @@ function hasUnsavedOpenAiSettings() {
 function updateKimiConnection() {
   const cli = $("#kimi-connection").value === "cli";
   $("#kimi-cli-config").hidden = !cli;
-  $("#kimi-api-config").hidden = cli;
+  $("#kimi-api-config").hidden = $("#kimi-connection").value !== "api";
+  $("#kimi-code-config").hidden = $("#kimi-connection").value !== "code";
+  invalidateKimiApiModels();
+  invalidateKimiApiModels("code");
 }
 
 function populateKimiCliModels(preferred = "") {
@@ -460,11 +467,12 @@ function populateKimiCliModels(preferred = "") {
   $("#kimi-cli-model").disabled = !kimiCliModels.length;
 }
 
-function populateKimiThinking(preferred = $("#kimi-api-thinking").value) {
-  const values = kimiThinkingOptions($("#kimi-api-model").value.trim());
+function populateKimiThinking(preferred, connection = "api") {
+  preferred ??= $(`#kimi-${connection}-thinking`).value;
+  const values = kimiThinkingOptions($(`#kimi-${connection}-model`).value.trim());
   const labels = { off: t("thinkingOff"), on: t("thinkingOn"), default: t("thinkingDefault") };
-  setOptions($("#kimi-api-thinking"), values.map((value) => [value, labels[value] || value]), values.includes(preferred) ? preferred : values[0]);
-  $("#kimi-api-thinking").disabled = values.length === 1;
+  setOptions($(`#kimi-${connection}-thinking`), values.map((value) => [value, labels[value] || value]), values.includes(preferred) ? preferred : values[0]);
+  $(`#kimi-${connection}-thinking`).disabled = values.length === 1;
 }
 
 async function detectKimiCli() {
@@ -484,35 +492,34 @@ async function detectKimiCli() {
   } finally { button.disabled = false; updateSettingsSaveBar(); }
 }
 
-function invalidateKimiApiModels() {
+function invalidateKimiApiModels(connection = "api") {
   kimiApiRequest++;
-  $("#kimi-api-models").replaceChildren();
-  $("#kimi-api-status").textContent = "";
-  $("#kimi-api-connect").disabled = false;
+  $(`#kimi-${connection}-models`).replaceChildren();
+  $(`#kimi-${connection}-status`).textContent = "";
+  $(`#kimi-${connection}-connect`).disabled = false;
 }
 
-async function detectKimiApi() {
+async function detectKimiApi(connection = "api") {
   const request = ++kimiApiRequest;
-  const region = $("#kimi-api-region").value;
-  const apiKey = $("#kimi-api-key").value.trim();
-  $("#kimi-api-connect").disabled = true;
-  $("#kimi-api-status").textContent = t("kimiDetecting");
+  const region = $(`#kimi-${connection}-region`).value;
+  const apiKey = $(`#kimi-${connection}-key`).value.trim();
+  $(`#kimi-${connection}-connect`).disabled = true;
+  $(`#kimi-${connection}-status`).textContent = t("kimiDetecting");
   try {
     if (!apiKey) throw new Error(t("kimiApiSelect"));
-    if (!await requestProviderPermission("kimi", { kimiConnection: "api", kimiApiRegion: region })) throw new Error(t("providerPermissionDenied"));
+    if (!await requestProviderPermission("kimi", { kimiConnection: connection, kimiApiRegion: region, kimiCodeRegion: region })) throw new Error(t("providerPermissionDenied"));
     if (request !== kimiApiRequest) return;
-    const response = await chrome.runtime.sendMessage({ type: "PRISM_KIMI_MODELS", connection: "api", region, apiKey });
+    const response = await chrome.runtime.sendMessage({ type: "PRISM_KIMI_MODELS", connection, region, apiKey });
     if (request !== kimiApiRequest) return;
     if (!response?.ok || !response.models?.length) throw new Error(response?.error || t("kimiApiSelect"));
-    $("#kimi-api-models").replaceChildren(...response.models.map(({ model }) => new Option(model, model)));
-    if (!$("#kimi-api-model").value.trim()) $("#kimi-api-model").value = response.models[0].model;
-    populateKimiThinking();
-    $("#kimi-api-status").textContent = `${t("codexReady")} · ${response.models.length} ${uiLanguage === "zh" ? "个模型" : "models"}`;
+    $(`#kimi-${connection}-models`).replaceChildren(...response.models.map(({ model }) => new Option(model, model)));
+    populateKimiThinking(undefined, connection);
+    $(`#kimi-${connection}-status`).textContent = `${t("codexReady")} · ${response.models.length} ${uiLanguage === "zh" ? "个模型" : "models"}`;
   } catch (error) {
-    if (request === kimiApiRequest) $("#kimi-api-status").textContent = translationError(error);
+    if (request === kimiApiRequest) $(`#kimi-${connection}-status`).textContent = translationError(error);
   } finally {
     if (request === kimiApiRequest) {
-      $("#kimi-api-connect").disabled = false;
+      $(`#kimi-${connection}-connect`).disabled = false;
       updateSettingsSaveBar();
     }
   }
@@ -525,14 +532,18 @@ function kimiSettingsDraft() {
     kimiApiRegion: $("#kimi-api-region").value,
     kimiApiKey: $("#kimi-api-key").value.trim(),
     kimiApiModel: $("#kimi-api-model").value.trim(),
-    kimiApiThinking: $("#kimi-api-thinking").value
+    kimiApiThinking: $("#kimi-api-thinking").value,
+    kimiCodeRegion: $("#kimi-code-region").value,
+    kimiCodeKey: $("#kimi-code-key").value.trim(),
+    kimiCodeModel: $("#kimi-code-model").value.trim(),
+    kimiCodeThinking: $("#kimi-code-thinking").value
   };
 }
 
 function hasUnsavedKimiSettings() {
   if (selectedProvider !== "kimi") return false;
   const draft = kimiSettingsDraft();
-  const keys = draft.kimiConnection === "cli" ? ["kimiCliModel"] : ["kimiApiRegion", "kimiApiKey", "kimiApiModel", "kimiApiThinking"];
+  const keys = draft.kimiConnection === "cli" ? ["kimiCliModel"] : draft.kimiConnection === "code" ? ["kimiCodeRegion", "kimiCodeKey", "kimiCodeModel", "kimiCodeThinking"] : ["kimiApiRegion", "kimiApiKey", "kimiApiModel", "kimiApiThinking"];
   return settings.provider !== "kimi" || ["kimiConnection", ...keys].some((key) => draft[key] !== settings[key]);
 }
 
@@ -858,10 +869,10 @@ function endpointPattern(value) {
 }
 
 async function requestProviderPermission(provider, draft) {
-  const kimiApi = provider === "kimi" && draft.kimiConnection === "api";
+  const kimiApi = provider === "kimi" && ["api", "code"].includes(draft.kimiConnection);
   const openaiApi = provider === "openai" && draft.openaiConnection === "api";
   if (!kimiApi && !openaiApi) return true;
-  const pattern = kimiApi ? endpointPattern(kimiApiBase(draft.kimiApiRegion)) : openaiApiOrigin(draft.openaiEndpoint);
+  const pattern = kimiApi ? endpointPattern(kimiApiBase(kimiApiSettings(draft).kimiApiRegion, draft.kimiConnection)) : openaiApiOrigin(draft.openaiEndpoint);
   if (await chrome.permissions.contains({ origins: [pattern] })) return true;
   return chrome.permissions.request({ origins: [pattern] });
 }
@@ -894,7 +905,7 @@ async function persistSettings() {
     }
     if (selectedProvider === "kimi") {
       if (draft.kimiConnection === "cli" && !draft.kimiCliModel) throw new Error(t("kimiSelect"));
-      if (draft.kimiConnection === "api" && (!draft.kimiApiKey || !draft.kimiApiModel)) throw new Error(t("kimiApiSelect"));
+      if (["api", "code"].includes(draft.kimiConnection) && (!kimiApiSettings(draft).kimiApiKey || !kimiApiSettings(draft).kimiApiModel)) throw new Error(t("kimiApiSelect"));
     }
     const granted = await requestProviderPermission(selectedProvider, draft);
     if (!granted) throw new Error(t("providerPermissionDenied"));
@@ -985,10 +996,14 @@ function wireEvents() {
   $("#openai-key").addEventListener("input", invalidateOpenAiApiModels);
   $("#kimi-connection").addEventListener("change", updateKimiConnection);
   $("#kimi-cli-connect").addEventListener("click", detectKimiCli);
-  $("#kimi-api-connect").addEventListener("click", detectKimiApi);
+  $("#kimi-api-connect").addEventListener("click", () => detectKimiApi());
   $("#kimi-api-model").addEventListener("input", () => populateKimiThinking());
-  $("#kimi-api-region").addEventListener("change", invalidateKimiApiModels);
-  $("#kimi-api-key").addEventListener("input", invalidateKimiApiModels);
+  $("#kimi-api-region").addEventListener("change", () => invalidateKimiApiModels());
+  $("#kimi-api-key").addEventListener("input", () => invalidateKimiApiModels());
+  $("#kimi-code-connect").addEventListener("click", () => detectKimiApi("code"));
+  $("#kimi-code-model").addEventListener("input", () => populateKimiThinking(undefined, "code"));
+  $("#kimi-code-region").addEventListener("change", () => invalidateKimiApiModels("code"));
+  $("#kimi-code-key").addEventListener("input", () => invalidateKimiApiModels("code"));
   $("#copy-kimi-command").addEventListener("click", () => copyText($("#kimi-install-command").textContent));
   $("#codex-connect").addEventListener("click", detectCodex);
   $("#codex-model").addEventListener("change", () => populateCodexEfforts());

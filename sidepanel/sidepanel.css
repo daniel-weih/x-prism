@@ -149,6 +149,7 @@ textarea::placeholder,input::placeholder { color:var(--faint); }
 @media(max-width:360px) { .app-shell { padding-inline:12px; }.tab { gap:4px; font-size:11px; }.brand-lockup p { max-width:170px; font-size:10px; }.section-card { padding:12px; }.provider-option { padding-left:9px; }.provider-option b { font-size:11px; }.result-actions { gap:4px; }.result-actions button { padding:6px; } }
 @media(prefers-reduced-motion:reduce) { *,*::after { transition:none !important; animation:none !important; }.indeterminate span { transform:translateX(80%); } }
 
+.speech-settings { margin-top:4px; padding-top:16px; border-top:1px solid var(--stroke); }
 .speech-settings label { display:grid; gap:7px; margin:14px 0; font-size:12px; }
 .speech-settings input, .speech-settings select { width:100%; min-width:0; min-height:36px; padding:8px 10px; }
 .reader-player { position:sticky; bottom:12px; z-index:5; padding:14px; margin-top:16px; box-shadow:0 4px 24px #0002; }

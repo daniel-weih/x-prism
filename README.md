@@ -145,3 +145,7 @@ US English IPA comes from the bundled [ipa-dict](https://github.com/open-dict-da
 Interface language icons are derived from [Lucide Languages](https://lucide.dev/icons/languages); its ISC license is included in [assets/LICENSE-lucide.txt](assets/LICENSE-lucide.txt). The current Prism mark is the monochrome folded P.
 
 Older screenshots and release notes are kept in the [historical archive (Chinese)](docs/history.zh-CN.md).
+
+### Kimi Code Subscription API
+
+Choose **Settings → Kimi → Kimi Code Subscription API**, select a region and enter the matching subscription key. Detect or manually enter a model, then save. Subscription and Open Platform settings and keys are stored separately. Uses `https://api.kimi.com/coding/v1` (China) or `https://api.kimi.ai/coding/v1` (international). Membership is intended for coding; availability depends on account entitlements and client support. See the [official documentation](https://www.kimi.com/code/docs/).

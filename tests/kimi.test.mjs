@@ -129,12 +129,12 @@ test('background routes Kimi selection/page requests through saved mode and enfo
       } },
     contextMenus: { onClicked: noEvent }, commands: { onCommand: noEvent },
     tabs: { onCreated: noEvent, onReplaced: noEvent, onRemoved: noEvent },
-    storage: { sync: { get: async () => ({ prismSettings: saved }) }, local: { get: async () => ({ prismSecrets: { kimiApiKey: 'saved-key' } }) } },
-    permissions: { contains: async ({ origins }) => { assert.deepEqual(origins, ['https://api.moonshot.cn/*']); return permit; } }
+    storage: { sync: { get: async () => ({ prismSettings: saved }) }, local: { get: async () => ({ prismSecrets: { kimiApiKey: 'saved-key', kimiCodeKey: 'saved-code-key' } }) } },
+    permissions: { contains: async ({ origins }) => { assert.deepEqual(origins, [saved.kimiConnection === 'code' ? 'https://api.kimi.ai/*' : 'https://api.moonshot.cn/*']); return permit; } }
   };
   globalThis.fetch = async (url, init) => {
-    apiCalls++; assert.equal(url, 'https://api.moonshot.cn/v1/chat/completions');
-    assert.equal(init.headers.Authorization, 'Bearer saved-key');
+    apiCalls++; assert.equal(url, saved.kimiConnection === 'code' ? 'https://api.kimi.ai/coding/v1/chat/completions' : 'https://api.moonshot.cn/v1/chat/completions');
+    assert.equal(init.headers.Authorization, saved.kimiConnection === 'code' ? 'Bearer saved-code-key' : 'Bearer saved-key');
     return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: '{"translations":["接口译文"]}' } }] });
   };
   try {
@@ -152,6 +152,13 @@ test('background routes Kimi selection/page requests through saved mode and enfo
     const removed = await send(); assert.equal(removed.ok, false); assert.match(removed.error, /no longer available/); assert.equal(apiCalls, 1);
     assert.equal(listener(message, { id: 'other-extension' }, () => {}), false);
     assert.equal(listener({ type: 'PRISM_KIMI_MODELS', connection: 'api' }, sender, () => {}), false);
+    Object.assign(saved, { kimiConnection: 'code', kimiCodeRegion: 'global', kimiCodeModel: 'k3' });
+    message.provider = 'kimi';
+    assert.equal((await send()).ok, false); assert.equal(apiCalls, 1);
+    permit = true;
+    assert.deepEqual(await send(), { ok: true, translations: ['接口译文'] });
+    assert.equal(apiCalls, 2);
+    assert.equal(listener({ type: 'PRISM_KIMI_MODELS', connection: 'code' }, sender, () => {}), false);
   } finally { globalThis.fetch = originalFetch; delete globalThis.chrome; }
 });
 
@@ -170,5 +177,48 @@ test('retiring engines clears obsolete keys from both stores and keeps remaining
     await saveSettings({ provider: 'deepl' });
     assert.equal((await getSettings()).provider, 'chrome');
     assert.ok(!JSON.stringify(memory.sync).includes('keep-kimi'));
+  } finally { delete globalThis.chrome; }
+});
+
+test('subscription API isolates credentials, endpoints and models from Open Platform in both regions', async () => {
+  for (const [region, host] of [['cn', 'api.kimi.com'], ['global', 'api.kimi.ai']]) {
+    const code = { ...settings, kimiConnection: 'code', kimiCodeRegion: region, kimiCodeKey: 'subscription-test-key', kimiCodeModel: 'k3', kimiCodeThinking: 'high' };
+    const calls = [];
+    const fetcher = async (url, init) => {
+      calls.push(url);
+      assert.equal(init.headers.Authorization, 'Bearer subscription-test-key');
+      assert.equal(init.redirect, 'error');
+      assert.equal(init.credentials, 'omit');
+      assert.ok(!Object.keys(init.headers).some(key => key.toLowerCase() === 'user-agent'));
+      if (!init.body) return jsonResponse({ data: [{ id: 'k3' }] });
+      const body = JSON.parse(init.body);
+      assert.equal(body.model, 'k3'); assert.equal(body.reasoning_effort, 'high');
+      return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: '{"translations":["你好"]}' } }] });
+    };
+    assert.equal((await listKimiApiModels(code, fetcher)).models[0].model, 'k3');
+    assert.deepEqual(await translateKimiApi(['hello'], 'en', 'zh', code, fetcher), ['你好']);
+    assert.deepEqual(calls, [`https://${host}/coding/v1/models`, `https://${host}/coding/v1/chat/completions`]);
+    await assert.rejects(listKimiApiModels({ ...code, kimiCodeKey: '' }, () => assert.fail('must not reuse platform key')), /API Key/);
+    await assert.rejects(listKimiApiModels({ ...code, kimiCodeRegion: 'invalid' }, () => assert.fail('must not send key')), /服务区域/);
+    await assert.rejects(listKimiApiModels(code, async () => jsonResponse({ error: { message: 'private-response' } }, 403)), /客户端.*HTTP 403/);
+  }
+});
+
+test('subscription settings survive mode switches with both keys excluded from sync', async () => {
+  const memory = { sync: {}, local: {} };
+  const area = name => ({ get: async key => ({ [key]: memory[name][key] }), set: async patch => Object.assign(memory[name], structuredClone(patch)) });
+  globalThis.chrome = { storage: { sync: area('sync'), local: area('local') } };
+  try {
+    await ensureDefaults();
+    await saveSettings({ ...settings, kimiConnection: 'code', kimiCodeRegion: 'global', kimiCodeKey: 'subscription-test-key', kimiCodeModel: 'k3', kimiCodeThinking: 'high' });
+    for (const kimiConnection of ['api', 'cli', 'code']) {
+      await saveSettings({ kimiConnection }); await ensureDefaults();
+      const saved = await getSettings();
+      assert.equal(saved.kimiConnection, kimiConnection);
+      assert.equal(saved.kimiCodeKey, 'subscription-test-key'); assert.equal(saved.kimiApiKey, settings.kimiApiKey);
+      assert.equal(saved.kimiCodeRegion, 'global'); assert.equal(saved.kimiApiRegion, 'cn');
+      assert.equal(saved.kimiCodeModel, 'k3'); assert.equal(saved.kimiApiModel, 'kimi-k3');
+      assert.ok(!('kimiCodeKey' in memory.sync.prismSettings)); assert.ok(!('kimiApiKey' in memory.sync.prismSettings));
+    }
   } finally { delete globalThis.chrome; }
 });

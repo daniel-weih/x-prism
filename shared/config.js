@@ -7,6 +7,7 @@ export const STORAGE_KEYS = Object.freeze({
 
 export const SECRET_SETTING_KEYS = Object.freeze([
   "kimiApiKey",
+  "kimiCodeKey",
   "openaiApiKey"
 ]);
 
@@ -15,7 +16,7 @@ export const OPENAI_REASONING_EFFORTS = Object.freeze([
 ]);
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  speechModel: "gpt-audio-1.5",
+  speechModel: "",
   speechVoice: "alloy",
   speechRate: 1,
   provider: "chrome",
@@ -28,20 +29,24 @@ export const DEFAULT_SETTINGS = Object.freeze({
   uiLanguage: "auto",
   theme: "system",
   maxPageSegments: 240,
-  openaiConnection: "cli",
+  openaiConnection: "api",
   openaiEndpoint: "https://api.openai.com/v1/chat/completions",
   openaiApiKey: "",
-  openaiModel: "gpt-4.1-mini",
+  openaiModel: "",
   openaiReasoningEffort: "",
   openaiFastMode: false,
   codexModel: "",
   codexReasoningEffort: "",
-  kimiConnection: "cli",
+  kimiConnection: "code",
   kimiCliModel: "",
   kimiApiRegion: "cn",
   kimiApiKey: "",
   kimiApiModel: "",
-  kimiApiThinking: "default"
+  kimiApiThinking: "default",
+  kimiCodeRegion: "cn",
+  kimiCodeKey: "",
+  kimiCodeModel: "",
+  kimiCodeThinking: "default"
 });
 
 export const PROVIDERS = Object.freeze([
@@ -52,22 +57,22 @@ export const PROVIDERS = Object.freeze([
     badge: "ON-DEVICE"
   },
   {
+    id: "mymemory",
+    name: "MyMemory",
+    local: false,
+    badge: "NO KEY"
+  },
+  {
     id: "openai",
     name: "OpenAI",
     local: false,
-    badge: "CLI / API"
+    badge: "API / CLI"
   },
   {
     id: "kimi",
     name: "Kimi",
     local: false,
-    badge: "CLI / API"
-  },
-  {
-    id: "mymemory",
-    name: "MyMemory",
-    local: false,
-    badge: "NO KEY"
+    badge: "API / CLI"
   }
 ]);
 
@@ -124,8 +129,9 @@ export function normalizeSettings(value = {}) {
   merged.openaiFastMode = merged.openaiFastMode === true;
   // Retired provider settings must not leak back into sync when splitting secrets.
   for (const key of ["deeplApiKey", "deeplUseFree", "libreEndpoint", "libreApiKey"]) delete merged[key];
-  if (!["cli", "api"].includes(merged.kimiConnection)) merged.kimiConnection = "cli";
+  if (!["cli", "api", "code"].includes(merged.kimiConnection)) merged.kimiConnection = DEFAULT_SETTINGS.kimiConnection;
   if (!["cn", "global"].includes(merged.kimiApiRegion)) merged.kimiApiRegion = "cn";
+  if (!["cn", "global"].includes(merged.kimiCodeRegion)) merged.kimiCodeRegion = "cn";
   merged.maxPageSegments = Math.min(
     600,
     Math.max(40, Number(merged.maxPageSegments) || DEFAULT_SETTINGS.maxPageSegments)

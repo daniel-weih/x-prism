@@ -145,3 +145,7 @@ swift scripts/render_icons.swift
 界面语言图标改编自 [Lucide Languages](https://lucide.dev/icons/languages)，ISC 许可证保留在 [assets/LICENSE-lucide.txt](assets/LICENSE-lucide.txt)。当前 Prism 标识为单色「折光 P」。
 
 旧版截图和更新记录保留在[历史归档](docs/history.zh-CN.md)中。
+
+### Kimi Code 订阅 API
+
+选择 **设置 → Kimi → Kimi Code 订阅 API**，选择区域并填写对应的订阅 Key，检测或手动填写模型后保存。订阅与开放平台的配置、Key 分别保存。国内使用 `https://api.kimi.com/coding/v1`，国际使用 `https://api.kimi.ai/coding/v1`。订阅权益面向编程场景，实际可用性取决于账号权益和客户端支持，详见[官方文档](https://www.kimi.com/code/docs/)。

@@ -4,7 +4,7 @@ import { addHistory, clearHistory, removeHistoryItem, toggleFavorite, ensureDefa
 import { lookupPronunciation } from "./shared/pronunciation.js";
 import { requestCodex } from "./shared/codex.js";
 import { requestKimi } from "./shared/kimi.js";
-import { listKimiApiModels, translateKimiApi, kimiApiBase } from "./shared/kimi-api.js";
+import { kimiApiSettings, listKimiApiModels, translateKimiApi, kimiApiBase } from "./shared/kimi-api.js";
 import { listOpenAiApiModels, translateOpenAiApi, openaiApiOrigin } from "./shared/openai-api.js";
 import { CONTEXT_READ_SELECTION, CONTEXT_READ_PAGE, CONTEXT_SELECTION, createExtensionConfigurator } from "./shared/extension-setup.js";
 import { configureTabPanel, openTabPanel, pendingActionKey } from "./shared/side-panel.js";
@@ -129,8 +129,8 @@ async function translateRemote(message) {
   let translations;
   if (provider === "mymemory") translations = await translateMyMemory(texts, source, target);
   if (provider === "kimi") {
-    if (settings.kimiConnection === "api") {
-      await assertKimiApiPermission(settings.kimiApiRegion);
+    if (["api", "code"].includes(settings.kimiConnection)) {
+      await assertKimiApiPermission(kimiApiSettings(settings).kimiApiRegion, settings.kimiConnection);
       translations = await translateKimiApi(texts, source, target, settings);
     } else {
       const result = await requestKimi({ action: "translate", texts, sourceLanguage: source || "auto", targetLanguage: target, model: settings.kimiCliModel });
@@ -155,8 +155,8 @@ async function translateRemote(message) {
   return translations;
 }
 
-async function assertKimiApiPermission(region) {
-  const origin = `${new URL(kimiApiBase(region)).origin}/*`;
+async function assertKimiApiPermission(region, connection = "api") {
+  const origin = `${new URL(kimiApiBase(region, connection)).origin}/*`;
   if (!await chrome.permissions.contains({ origins: [origin] })) throw new Error("请在 Kimi API 设置中保存设置并允许访问所选服务区域。");
 }
 
@@ -186,8 +186,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message?.type === "PRISM_KIMI_MODELS" && sender.url?.startsWith(chrome.runtime.getURL(""))) {
-    const result = message.connection === "api"
-      ? assertKimiApiPermission(message.region).then(() => listKimiApiModels({ kimiApiRegion: message.region, kimiApiKey: message.apiKey }))
+    const result = ["api", "code"].includes(message.connection)
+      ? assertKimiApiPermission(message.region, message.connection).then(() => listKimiApiModels({ kimiConnection: message.connection, kimiApiRegion: message.region, kimiApiKey: message.apiKey, kimiCodeRegion: message.region, kimiCodeKey: message.apiKey }))
       : requestKimi({ action: "models" }, chrome.runtime, 45_000);
     result.then((data) => sendResponse({ ok: true, ...data }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));

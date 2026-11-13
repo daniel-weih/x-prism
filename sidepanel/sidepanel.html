@@ -99,7 +99,7 @@
         <div class="provider-config" id="chrome-config"><p class="config-hint" data-i18n="localEngineHint">Text is translated on this device. Chrome may download a local language pack the first time you use a language pair.</p></div>
         <div class="provider-config" id="mymemory-config"><p class="config-hint" data-i18n="myMemoryHint">An online service with no API key. Text is sent to MyMemory; daily usage limits apply.</p></div>
         <div class="provider-config" id="openai-config">
-          <label><span data-i18n="kimiConnection">Connection</span><select id="openai-connection"><option value="cli" data-i18n="openaiCli">Local Codex CLI</option><option value="api" data-i18n="openaiApi">API</option></select></label>
+          <label><span data-i18n="kimiConnection">Connection</span><select id="openai-connection"><option value="api" data-i18n="openaiApi">API</option><option value="cli" data-i18n="openaiCli">Local Codex CLI</option></select></label>
           <div class="connection-config" id="openai-cli-config">
             <p class="config-hint" data-i18n="codexHint">Use your local Codex login. Translation runs through your configured Codex service.</p>
             <button class="secondary-button" id="codex-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
@@ -125,9 +125,18 @@
             <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="openai-effort" aria-describedby="openai-effort-hint"></select></label>
             <p class="config-hint" id="openai-effort-hint" data-i18n="openaiEffortHint">Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.</p>
           </div>
+          <section class="speech-settings">
+            <div class="section-heading"><div><h3 data-i18n="speechSettings">OpenAI · Read aloud</h3><p data-i18n="speechHint">Uses the API connection configured for OpenAI translation. AI-generated voice.</p></div></div>
+            <p class="config-hint" data-i18n="speechKeyHint">Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.</p>
+            <label><span data-i18n="model">Model</span><select id="speech-model"></select></label>
+            <label><span data-i18n="voice">Voice</span><select id="speech-voice"></select></label>
+            <label><span data-i18n="speechRate">Playback speed</span><select id="speech-rate"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+            <button class="secondary-button" id="speech-preview" type="button" data-i18n="voicePreview">Preview voice</button>
+            <p class="config-hint" data-i18n="previewHint">Preview uses these choices and incurs API usage. Save settings to use them for reading.</p>
+          </section>
         </div>
         <div class="provider-config" id="kimi-config">
-          <label><span data-i18n="kimiConnection">Connection</span><select id="kimi-connection"><option value="cli" data-i18n="kimiCli">Local CLI</option><option value="api" data-i18n="kimiApi">Open Platform API</option></select></label>
+          <label><span data-i18n="kimiConnection">Connection</span><select id="kimi-connection"><option value="api" data-i18n="kimiApi">Open Platform API</option><option value="code" data-i18n="kimiCode">Kimi Code Subscription API</option><option value="cli" data-i18n="kimiCli">Local CLI</option></select></label>
           <div class="connection-config" id="kimi-cli-config">
             <p class="config-hint" data-i18n="kimiCliHint">Uses your Kimi Code login and cloud service. Thinking follows your CLI configuration.</p>
             <button class="secondary-button" id="kimi-cli-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
@@ -148,18 +157,19 @@
             <label><span data-i18n="model">Model</span><input id="kimi-api-model" type="text" list="kimi-api-models" autocomplete="off" spellcheck="false" data-i18n-placeholder="kimiModelHint" placeholder="Detect models or enter a model ID"><datalist id="kimi-api-models"></datalist></label>
             <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="kimi-api-thinking"></select></label>
           </div>
+          <div class="connection-config" id="kimi-code-config" hidden>
+            <p class="config-hint" data-i18n="kimiCodeHint">Use a Kimi Code subscription key. Availability depends on your membership and client support.</p>
+            <label><span data-i18n="kimiRegion">Service region</span><select id="kimi-code-region"><option value="cn" data-i18n="kimiCodeCn">China · api.kimi.com</option><option value="global" data-i18n="kimiCodeGlobal">Global · api.kimi.ai</option></select></label>
+            <label><span data-i18n="apiKey">API key</span><input id="kimi-code-key" type="password" autocomplete="off" placeholder="••••••••••••" spellcheck="false"></label>
+            <button class="secondary-button" id="kimi-code-connect" type="button" data-i18n="codexConnect">Detect connection &amp; refresh models</button>
+            <p class="connection-status" id="kimi-code-status" role="status"></p>
+            <label><span data-i18n="model">Model</span><input id="kimi-code-model" type="text" list="kimi-code-models" autocomplete="off" spellcheck="false" data-i18n-placeholder="kimiModelHint" placeholder="Detect models or enter a model ID"><datalist id="kimi-code-models"></datalist></label>
+            <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="kimi-code-thinking"></select></label>
+          </div>
         </div>
       </section>
 
-      <section class="section-card surface-card speech-settings">
-        <div class="section-heading"><div><h3 data-i18n="speechSettings">OpenAI · Read aloud</h3><p data-i18n="speechHint">Uses the API connection configured for OpenAI translation. AI-generated voice.</p></div></div>
-        <p class="config-hint" data-i18n="speechKeyHint">Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.</p>
-        <label><span data-i18n="model">Model</span><select id="speech-model"></select></label>
-        <label><span data-i18n="voice">Voice</span><select id="speech-voice"></select></label>
-        <label><span data-i18n="speechRate">Playback speed</span><select id="speech-rate"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
-        <button class="secondary-button" id="speech-preview" type="button" data-i18n="voicePreview">Preview voice</button>
-        <p class="config-hint" data-i18n="previewHint">Preview uses these choices and incurs API usage. Save settings to use them for reading.</p>
-      </section>
+
       <section class="section-card surface-card compact-settings">
         <label class="setting-row"><span><b data-i18n="interfaceLanguage">Interface language</b><small data-i18n="interfaceLanguageHint">Follow Chrome or choose manually</small></span><select id="ui-language"><option value="auto" data-i18n="auto">Follow Chrome</option><option value="en">English</option><option value="zh">中文</option></select></label>
         <label class="setting-row"><span><b data-i18n="appearance">Appearance</b><small data-i18n="appearanceHint">Choose a light or dark appearance</small></span><select id="theme"><option value="system" data-i18n="system">System</option><option value="light" data-i18n="light">Light</option><option value="dark" data-i18n="dark">Dark</option></select></label>

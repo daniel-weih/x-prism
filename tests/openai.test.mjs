@@ -36,7 +36,7 @@ test('legacy Codex and API selections migrate to distinct OpenAI modes without c
       assert.deepEqual(memory.local.prismHistory, [{ id: 'keep-history' }]);
     } finally { delete globalThis.chrome; }
   }
-  assert.equal(normalizeSettings().openaiConnection, 'cli');
+  assert.equal(normalizeSettings().openaiConnection, 'api');
   assert.equal(normalizeSettings({ openaiReasoningEffort: 'invalid' }).openaiReasoningEffort, '');
   assert.equal(normalizeSettings({ provider: 'openai', openaiConnection: 'cli' }).openaiConnection, 'cli');
   assert.equal(normalizeSettings({ provider: 'kimi', kimiConnection: 'api' }).provider, 'kimi');

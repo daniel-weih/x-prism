@@ -22,8 +22,8 @@ export function createReader({ getSettings, sendToTab, toast, showSettings, getC
     $("#speech-voice").value = list.includes(preferred) ? preferred : list[0];
   }
   function fill(settings) {
-    $("#speech-model").replaceChildren(...SPEECH_MODELS.map(m => new Option(m, m)));
-    $("#speech-model").value = SPEECH_MODELS.includes(settings.speechModel) ? settings.speechModel : SPEECH_MODELS[0];
+    $("#speech-model").replaceChildren(new Option(say("请选择朗读模型", "Choose a speech model"), ""), ...SPEECH_MODELS.map(m => new Option(m, m)));
+    $("#speech-model").value = SPEECH_MODELS.includes(settings.speechModel) ? settings.speechModel : "";
     voices(settings.speechVoice);
     $("#speech-rate").value = String(settings.speechRate || 1);
   }

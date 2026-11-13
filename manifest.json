@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Prism",
   "short_name": "Prism",
-  "version": "1.6.0",
+  "version": "1.7.2",
   "description": "Translate selected text and bilingual pages, or read words and articles aloud with your choice of OpenAI models and voices.",
   "minimum_chrome_version": "116",
   "permissions": [
