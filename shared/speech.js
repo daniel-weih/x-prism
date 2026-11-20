@@ -97,7 +97,11 @@ export function splitSpeech(paragraphs, limit = 600) {
   return result;
 }
 export function speechKey(settings) { return String(settings.openaiApiKey || "").trim(); }
-export function speechEndpoint(settings) { return openaiApiUrl(settings.openaiEndpoint).href; }
+export function speechEndpoint(settings) {
+  const url = openaiApiUrl(settings.openaiEndpoint);
+  url.pathname = url.pathname.replace(/\/responses\/?$/, "/chat/completions");
+  return url.href;
+}
 export function isOfficialSpeechEndpoint(settings) {
   return speechEndpoint(settings) === "https://api.openai.com/v1/chat/completions";
 }

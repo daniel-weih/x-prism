@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SpeechPlayer, splitSpeech, speechSeconds, synthesizeSpeech, speechKey, speechVoices, pcmWave, speechOrigin } from '../shared/speech.js';
 import { normalizeSettings, SECRET_SETTING_KEYS } from '../shared/config.js';
-const settings = { speechModel: 'gpt-audio-1.5', speechVoice: 'alloy', openaiApiKey: 'test-only-key', openaiEndpoint: 'https://api.openai.com/v1/chat/completions', speechRate: 1 };
+const settings = { speechModel: 'gpt-audio-1.5', speechVoice: 'alloy', openaiApiKey: 'test-only-key', openaiEndpoint: 'https://api.openai.com/v1/responses', speechRate: 1 };
 const firstPassage = 'The first passage contains several words so it stays separate from the second passage.';
 const secondPassage = 'The second passage contains several words and should play after the first passage finishes.';
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -31,6 +31,7 @@ test('Chat audio uses saved model and voice, no storage, no redirects; rejects t
  let request;
  const fetcher=async(url,init)=>{request={url,...init,body:JSON.parse(init.body)};return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{audio:{data:btoa('audio'),transcript:'Read this.'}}}]})};};
  const blob=await synthesizeSpeech('Read this.',settings,new AbortController().signal,{fetcher});
+ assert.equal(request.url,'https://api.openai.com/v1/chat/completions');
  assert.equal(await blob.text(),'audio');assert.equal(request.body.audio.voice,'alloy');assert.equal(request.body.store,false);assert.equal(request.redirect,'error');assert.equal(request.credentials,'omit');
  assert.deepEqual(JSON.parse(request.body.messages[1].content),{text_to_read:'Read this.'});
  await assert.rejects(synthesizeSpeech('text',settings,new AbortController().signal,{fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'length',message:{audio:{data:btoa('partial')}}}]})})}),/Incomplete/);

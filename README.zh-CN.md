@@ -4,7 +4,7 @@
 
 Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字即可翻译或朗读，也可以将整页转为双语对照，一边查看原文，一边听文章。轻量划词菜单和右下角圆形悬浮按钮让这些操作靠近正在阅读的内容。侧边栏保留设置、历史和手动输入功能。
 
-翻译支持 Chrome 本地模型、OpenAI、Kimi 和 MyMemory。朗读使用 OpenAI，可选择模型、音色和播放速度，直接共用 OpenAI 翻译的接口地址和 API Key。
+翻译支持 Chrome 本地模型、OpenAI、Kimi 和 MyMemory。朗读使用 OpenAI，可选择模型、音色和播放速度，与 OpenAI 翻译共用服务地址和 API Key。
 
 ## 界面预览
 
@@ -69,13 +69,15 @@ Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字�
 
 ### OpenAI API
 
-在**设置 → OpenAI → API**中填写接口地址、API Key 和文本模型。默认地址为 `https://api.openai.com/v1/chat/completions`；自定义兼容服务需要支持所选模型及所需的输出格式。
+在**设置 → OpenAI → API**中填写接口地址、API Key 和文本模型。全球官方接口的标准、Fast 和 Ultrafast 档位均使用 `https://api.openai.com/v1/responses`。升级后，已保存的全球官方 Chat Completions 地址会自动迁移。自定义兼容服务可填写其 Responses 或 Chat Completions 地址。
 
 点击**检测连接并刷新模型**读取服务提供的模型列表；服务不支持模型列表时，也可以手动填写模型 ID。除非模型支持明确指定推理强度，否则保持默认选项。翻译前先保存设置。
 
 Chrome 会请求访问所配置域名的权限。远程接口必须使用 HTTPS，本机服务可使用 HTTP。请求不携带浏览器 Cookie，并拒绝重定向。API 凭据与 Codex CLI 登录独立。
 
-**Fast 模式**默认关闭，适用于[官方 Fast 定价表](https://developers.openai.com/api/docs/pricing)中已确认支持的 OpenAI 文本模型。开启后请求更快的 API 翻译，费用更高，实际处理取决于服务可用性；不支持或未识别的模型无法开启。自定义兼容接口还需服务商支持。关闭后，官方 API 使用标准档位，兼容接口沿用服务商默认档位。此设置仅作用于 API 翻译，与推理强度独立，不改变 CLI 翻译和朗读。
+**服务档位**仅用于 OpenAI API 翻译，与推理强度独立。默认使用标准档位，升级后保留已有 Fast 设置。Fast 费用更高，需模型和接口支持。兼容接口选择标准时沿用服务商的默认档位。[OpenAI Fast 定价表](https://developers.openai.com/api/docs/pricing#fast-pricing-data)
+
+**Ultrafast** 费用高于 Fast。选择 `gpt-6.2-astra`、`gpt-6.2-sol`、`gpt-6-astra` 或 `gpt-6.1-sol`，在 OpenAI 全球官方接口上即可选择 Ultrafast。实际可用性取决于 API 项目和服务限额。[OpenAI Ultrafast 指南](https://developers.openai.com/api/docs/guides/ultrafast-mode)
 
 ### 本机 CLI 连接器
 
@@ -105,7 +107,7 @@ node scripts/install-kimi-host.mjs <扩展ID>
 
 无需再填第二份 Key。翻译可以继续使用其他服务，但即使翻译在本地运行，朗读仍需要共用的 OpenAI API 连接。Codex CLI 登录不能代替 API Key。
 
-当前模型选项包括 `gpt-audio-1.5`、`gpt-realtime-2.1` 和 `gpt-realtime-2.1-mini`，音色随模型匹配，实际访问权限取决于账号。Chat 音频使用所配置的完整接口地址；Realtime 当前要求标准 OpenAI 官方接口，不会把自定义服务的凭据转发给 OpenAI。
+当前模型选项包括 `gpt-audio-1.5`、`gpt-realtime-2.1` 和 `gpt-realtime-2.1-mini`，音色随模型匹配，实际访问权限取决于账号。Chat 音频使用同一服务的 Chat Completions 接口。Realtime 需要 OpenAI 全球官方接口。
 
 每个原段落独立合成，相邻短段落不会合并。首片较短，后续片段适当加长。播放器以约 25 秒的预计播放时长为缓冲目标，最多同时发起 2 个合成请求，保留当前片及最多 4 个后续片段。暂停后不再扩充缓冲，停止会取消未完成请求；每片完整生成后才开始播放。
 

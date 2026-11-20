@@ -25,7 +25,7 @@ The optional connector requires the `nativeMessaging` permission and a one-time 
 
 ### API
 
-API mode sends translation text to the configured OpenAI or compatible Chat Completions endpoint, using the locally stored API key. Detecting models sends the key to the same origin’s models endpoint without any page text. Requests reject redirects and omit browser cookies. Endpoints must use HTTPS, except for local services on localhost or 127.0.0.1.
+API mode sends translation text and the locally stored API key to the configured service. All translation tiers on the global OpenAI endpoint use `/v1/responses`. Responses requests include `store: false`. Detecting models sends the key to the same origin’s models endpoint without any page text. Requests reject redirects and omit browser cookies. Endpoints must use HTTPS, except for local services on localhost or 127.0.0.1.
 
 Custom endpoints require a separate Chrome host-access confirmation for the exact origin. Required host access is limited to the documented MyMemory API origin.
 
@@ -41,9 +41,9 @@ Kimi offers three independent modes. **Local CLI** uses the installed Kimi Code 
 
 Page-initiated reading uses an extension-owned iframe in the bottom-right corner. API keys stay inside the extension context; page scripts receive neither keys nor audio. The iframe relays only its own tab’s reading state and highlight controls. Closing it or leaving the page stops playback. Page translation and selection translation do not automatically open the side panel.
 
-Read aloud shares the endpoint and API key configured for OpenAI translation. Starting reading sends the requested word, selected passage, input text, translation, or extracted article body to that service; preview sends a fixed sample sentence. This also applies when the translation engine is Chrome Local AI. Speech is AI-generated and API usage is billed by the configured service.
+Read aloud shares the service and API key configured for OpenAI translation. Starting reading sends the requested word, selected passage, input text, translation, or extracted article body to that service; preview sends a fixed sample sentence. This also applies when the translation engine is Chrome Local AI. Speech is AI-generated and API usage is billed by the configured service.
 
-The shared OpenAI API key stays in `chrome.storage.local`, excluded from sync. There is no separate reading credential. Chat audio uses the exact configured translation endpoint. Realtime is currently supported only with the official OpenAI endpoint; custom-service credentials are never forwarded to OpenAI. No key is passed to page scripts, included in a URL, or stored with audio. Chat audio requests use `store: false`, omit cookies and reject redirects. Realtime uses a short-lived client secret for WebSocket authentication. OpenAI's retention policies still apply.
+The shared OpenAI API key stays in `chrome.storage.local`, excluded from sync. There is no separate reading credential. Chat audio uses Chat Completions on the same origin as translation. Realtime is currently supported only with the official OpenAI endpoint; custom-service credentials are never forwarded to OpenAI. No key is passed to page scripts, included in a URL, or stored with audio. Chat audio requests use `store: false`, omit cookies and reject redirects. Realtime uses a short-lived client secret for WebSocket authentication. OpenAI's retention policies still apply.
 
 For every speech chunk, Prism checks the model-reported audio transcript against the source before playback and rejects missing or mismatched transcripts. Paragraph checks ignore differences in casing, whitespace and punctuation; spoken rewrites of numbers or symbols can still be rejected. This is not independent audio recognition; no additional transcription service is called. Realtime requests carry explicit reading instructions and only the current script, without conversation history.
 

@@ -1,4 +1,5 @@
 import { SPEECH_MODELS, speechVoices } from "./speech.js";
+import { OPENAI_ORIGIN, isUnsupportedTranslationModel, openAiTranslationTiers, openaiTranslationUrl } from "./openai-api.js";
 export const STORAGE_KEYS = Object.freeze({
   settings: "prismSettings",
   secrets: "prismSecrets",
@@ -30,11 +31,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: "system",
   maxPageSegments: 240,
   openaiConnection: "api",
-  openaiEndpoint: "https://api.openai.com/v1/chat/completions",
+  openaiEndpoint: `${OPENAI_ORIGIN}/v1/responses`,
   openaiApiKey: "",
   openaiModel: "",
   openaiReasoningEffort: "",
-  openaiFastMode: false,
+  openaiServiceTier: "default",
   codexModel: "",
   codexReasoningEffort: "",
   kimiConnection: "code",
@@ -110,13 +111,15 @@ export function normalizeSettings(value = {}) {
   if (!speechVoices(merged.speechModel).includes(merged.speechVoice)) merged.speechVoice = speechVoices(merged.speechModel)[0];
   if (![0.75, 1, 1.25, 1.5, 2].includes(Number(merged.speechRate))) merged.speechRate = 1;
   else merged.speechRate = Number(merged.speechRate);
-  // Consolidate the former official-only speech key without overriding the
-  // existing translation credential or sending an official key to a proxy.
-  if (!String(merged.openaiApiKey || "").trim() && value.speechApiKey) {
-    try {
-      if (new URL(merged.openaiEndpoint).origin === "https://api.openai.com") merged.openaiApiKey = value.speechApiKey;
-    } catch { /* Keep invalid endpoint handling in the API settings. */ }
-  }
+  try {
+    const endpoint = openaiTranslationUrl(merged.openaiEndpoint);
+    if (endpoint.origin === OPENAI_ORIGIN) {
+      merged.openaiEndpoint = endpoint.href;
+      if (isUnsupportedTranslationModel(merged.openaiModel, endpoint)) merged.openaiModel = "";
+      // The retired speech key was issued for the official service.
+      if (!String(merged.openaiApiKey || "").trim() && value.speechApiKey) merged.openaiApiKey = value.speechApiKey;
+    }
+  } catch { /* Keep invalid endpoint handling in the API settings. */ }
   delete merged.speechApiKey;
   // Before 1.4, "codex" was CLI-only and "openai" was API-only.
   if (value.provider === "codex") {
@@ -126,7 +129,9 @@ export function normalizeSettings(value = {}) {
     merged.openaiConnection = value.provider === "openai" ? "api" : DEFAULT_SETTINGS.openaiConnection;
   }
   if (!OPENAI_REASONING_EFFORTS.includes(merged.openaiReasoningEffort)) merged.openaiReasoningEffort = "";
-  merged.openaiFastMode = merged.openaiFastMode === true;
+  const tier = value.openaiServiceTier ?? (value.openaiFastMode === true ? "fast" : "default");
+  merged.openaiServiceTier = openAiTranslationTiers(merged.openaiModel, merged.openaiEndpoint).includes(tier) ? tier : "default";
+  delete merged.openaiFastMode;
   // Retired provider settings must not leak back into sync when splitting secrets.
   for (const key of ["deeplApiKey", "deeplUseFree", "libreEndpoint", "libreApiKey"]) delete merged[key];
   if (!["cli", "api", "code"].includes(merged.kimiConnection)) merged.kimiConnection = DEFAULT_SETTINGS.kimiConnection;

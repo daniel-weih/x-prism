@@ -121,13 +121,14 @@
             <p class="connection-status" id="openai-api-status" role="status"></p>
             <label><span data-i18n="model">Model</span><input id="openai-model" type="text" list="openai-api-models" autocomplete="off" spellcheck="false" data-i18n-placeholder="kimiModelHint" placeholder="Detect models or enter a model ID"><datalist id="openai-api-models"></datalist></label>
             <p class="config-hint" data-i18n="openaiModelHint">Choose a text chat model. If model detection is unavailable, enter the model ID manually.</p>
-            <label class="setting-row fast-setting"><span><b data-i18n="openaiFastMode">Fast mode</b><small id="openai-fast-hint"></small></span><input class="switch" id="openai-fast" type="checkbox" aria-describedby="openai-fast-hint"></label>
+            <label><span data-i18n="openaiServiceTier">Service tier</span><select id="openai-service-tier" aria-describedby="openai-service-tier-hint"><option value="default" data-i18n="openaiStandard">Standard</option><option value="fast">Fast</option><option value="ultrafast">Ultrafast</option></select></label>
+            <p class="config-hint" id="openai-service-tier-hint"></p>
             <label><span data-i18n="reasoningEffort">Reasoning effort</span><select id="openai-effort" aria-describedby="openai-effort-hint"></select></label>
             <p class="config-hint" id="openai-effort-hint" data-i18n="openaiEffortHint">Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.</p>
           </div>
           <section class="speech-settings">
             <div class="section-heading"><div><h3 data-i18n="speechSettings">OpenAI · Read aloud</h3><p data-i18n="speechHint">Uses the API connection configured for OpenAI translation. AI-generated voice.</p></div></div>
-            <p class="config-hint" data-i18n="speechKeyHint">Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.</p>
+            <p class="config-hint" data-i18n="speechKeyHint">Uses the same service and API key as OpenAI translation. Choose only the reading model, voice and speed here.</p>
             <label><span data-i18n="model">Model</span><select id="speech-model"></select></label>
             <label><span data-i18n="voice">Voice</span><select id="speech-voice"></select></label>
             <label><span data-i18n="speechRate">Playback speed</span><select id="speech-rate"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>

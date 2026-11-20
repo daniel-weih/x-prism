@@ -4,7 +4,7 @@
 
 Prism is a Chrome extension for web translation and AI read aloud. Select text to translate or listen, view a page in two languages, or listen to an article while keeping the source in view. A compact selection menu and a circular button in the bottom-right corner keep these actions close to what you are reading. The side panel remains available for settings, history, and typed text.
 
-Translation supports Chrome's on-device models, OpenAI, Kimi, and MyMemory. Read aloud uses OpenAI with selectable models, voices, and playback speed, sharing the endpoint and API key configured for OpenAI translation.
+Translation supports Chrome's on-device models, OpenAI, Kimi, and MyMemory. Read aloud uses OpenAI with selectable models, voices, and playback speed, sharing the service and API key configured for OpenAI translation.
 
 ## Interface Preview
 
@@ -69,13 +69,15 @@ When the detected source and selected target language match, Prism switches the 
 
 ### OpenAI API
 
-In **Settings → OpenAI → API**, enter the endpoint, API key, and text model. The default endpoint is `https://api.openai.com/v1/chat/completions`. Custom compatible services must support the requested model and output format.
+In **Settings → OpenAI → API**, enter the endpoint, API key, and text model. Standard, Fast, and Ultrafast all use `https://api.openai.com/v1/responses`. Prism updates the saved global OpenAI Chat Completions address automatically. For a compatible service, enter its Responses or Chat Completions endpoint.
 
 Use **Detect connection and refresh models** to load the service's model list, or enter a model ID manually if the service does not provide one. Leave reasoning effort at the model default unless the chosen model supports an explicit value. Save your settings before translating.
 
 Chrome asks for access to the configured origin. Remote endpoints must use HTTPS; localhost services may use HTTP. Requests omit browser cookies and reject redirects. API credentials are separate from a Codex CLI login.
 
-**Fast mode** is off by default and available for OpenAI text models in the [documented Fast pricing table](https://developers.openai.com/api/docs/pricing). It requests faster API translation at a higher price; actual processing depends on service availability. Unsupported or unrecognized models cannot enable it. Custom compatible endpoints must also support Fast. Turning it off selects Standard on the official API and leaves compatible providers at their default tier. This setting applies to API translation, independently of reasoning effort, and does not change CLI translation or read aloud.
+**Service tier** controls OpenAI API translation independently of reasoning effort. Standard is the default, and existing Fast selections carry over. Fast costs more and requires a supported model and endpoint. Compatible providers use their default tier when Standard is selected. [OpenAI Fast pricing](https://developers.openai.com/api/docs/pricing#fast-pricing-data)
+
+**Ultrafast** costs more than Fast and is available for `gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6-astra`, and `gpt-6.1-sol` on the global OpenAI endpoint. Availability depends on your API project and service limits. [OpenAI Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode)
 
 ### Local CLI Connectors
 
@@ -105,7 +107,7 @@ Choose **Settings → Kimi → Open Platform API**, select the domestic or inter
 
 There is no second API key to enter. Translation can still use a different provider, but reading requires the shared OpenAI API connection even when translation runs locally. A Codex CLI login does not replace an API key.
 
-The current model selector includes `gpt-audio-1.5`, `gpt-realtime-2.1`, and `gpt-realtime-2.1-mini`. Available voices follow the selected model; access depends on your account. Chat audio uses the exact configured endpoint. Realtime currently requires the standard OpenAI endpoint and never forwards custom-service credentials to OpenAI.
+The current model selector includes `gpt-audio-1.5`, `gpt-realtime-2.1`, and `gpt-realtime-2.1-mini`. Available voices follow the selected model; access depends on your account. Chat audio uses Chat Completions on the configured service. Realtime requires the global OpenAI endpoint.
 
 Each source paragraph is synthesized separately; adjacent short paragraphs are not combined. The opening clip is kept shorter; later clips are longer. The player targets an estimated 25-second buffer, allows at most two synthesis requests at once, and retains no more than four future clips plus the current clip. Pausing stops further prefetching; stopping cancels outstanding requests. Each clip must finish generating before playback starts.
 

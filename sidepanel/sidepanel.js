@@ -1,7 +1,7 @@
 import { createReader } from "./reader.js";
 import { LANGUAGES, OPENAI_REASONING_EFFORTS, PROVIDERS } from "../shared/config.js";
 import { kimiApiSettings, kimiApiBase, kimiThinkingOptions } from "../shared/kimi-api.js";
-import { openaiApiOrigin, supportsOpenAiFast } from "../shared/openai-api.js";
+import { openaiApiOrigin, openAiTranslationTiers, openaiTranslationUrl, isUnsupportedTranslationModel } from "../shared/openai-api.js";
 import { panelTabId, pendingActionKey } from "../shared/side-panel.js";
 import {
   ensureDefaults,
@@ -44,11 +44,12 @@ const copy = {
     openaiCli: "Local Codex CLI", openaiApi: "API", openaiDetecting: "Connecting to OpenAI API…",
     openaiApiHint: "Use an API key independently of your Codex CLI login. OpenAI-compatible services are also supported.",
     openaiApiSelect: "Enter the API endpoint, API key and model first.",
+    openaiResponsesModelRequired: "Choose a Responses API text model for translation.",
     openaiModelHint: "Choose a text chat model. If model detection is unavailable, enter the model ID manually.",
-    openaiFastMode: "Fast mode",
-    openaiFastHint: "Faster API translation at a higher price. Off uses Standard processing. Actual speed depends on service availability.",
-    openaiFastCompatibleHint: "Faster API translation at a higher price. Your provider must support Fast; when off, its default tier applies.",
-    openaiFastUnavailable: "Fast support is not confirmed for this model. Choose a supported OpenAI text model.",
+    openaiServiceTier: "Service tier", openaiStandard: "Standard",
+    openaiUltrafastHint: "Fast and Ultrafast cost more. Availability depends on your API project and service capacity.",
+    openaiFastHint: "Fast costs more and requires provider support. Compatible providers use their default tier when Standard is selected.",
+    openaiTierUnavailable: "Choose a supported OpenAI text model to enable faster tiers.",
     openaiEffortDefault: "Unspecified (model default)", openaiEffortNone: "none (reasoning off)",
     openaiEffortHint: "Unspecified uses the model default. Explicit levels, including none, require model support; use Unspecified for non-reasoning models.",
     kimiConnection: "Connection", kimiCli: "Local CLI", kimiApi: "Open Platform API", kimiCode: "Kimi Code Subscription API", kimiCodeCn: "China · api.kimi.com", kimiCodeGlobal: "International · api.kimi.ai", kimiCodeHint: "Uses a Kimi Code subscription key and membership quota, separately from the Open Platform. Intended for coding; availability depends on your membership and client support.",
@@ -110,11 +111,12 @@ const copy = {
     openaiCli: "本机 Codex CLI", openaiApi: "API", openaiDetecting: "正在连接 OpenAI API…",
     openaiApiHint: "使用 API Key，与 Codex CLI 登录独立；也支持 OpenAI 兼容服务。",
     openaiApiSelect: "请先填写 API 接口地址、API Key 和模型。",
+    openaiResponsesModelRequired: "请选择支持 Responses API 的文本翻译模型。",
     openaiModelHint: "请选择支持文本对话的模型；接口不支持检测时可手动填写模型 ID。",
-    openaiFastMode: "Fast 模式",
-    openaiFastHint: "加快 API 翻译，费用更高。关闭后使用标准档位，实际速度取决于服务可用性。",
-    openaiFastCompatibleHint: "加快 API 翻译，费用更高。需接口服务商支持 Fast；关闭后沿用服务商默认档位。",
-    openaiFastUnavailable: "尚未确认此模型支持 Fast，请选择支持的 OpenAI 文本模型。",
+    openaiServiceTier: "服务档位", openaiStandard: "标准",
+    openaiUltrafastHint: "Fast 和 Ultrafast 费用更高，实际可用性取决于 API 项目权限和服务容量。",
+    openaiFastHint: "Fast 费用更高，需服务商支持。兼容接口选择标准时沿用服务商的默认档位。",
+    openaiTierUnavailable: "请选择支持加速档位的 OpenAI 文本模型。",
     openaiEffortDefault: "不指定（模型默认）", openaiEffortNone: "none（关闭推理）",
     openaiEffortHint: "不指定时使用模型默认值。各档位（含 none）需模型支持；非推理模型请选择“不指定”。",
     kimiConnection: "接入方式", kimiCli: "本机 CLI", kimiApi: "开放平台 API", kimiCode: "Kimi Code 订阅 API", kimiCodeCn: "国内 · api.kimi.com", kimiCodeGlobal: "国际 · api.kimi.ai", kimiCodeHint: "使用 Kimi Code 订阅 Key 与会员额度，与开放平台独立。订阅权益面向编程场景，实际可用性取决于账号权益和客户端支持。",
@@ -179,8 +181,8 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 const t = (key) => copy[uiLanguage]?.[key] || copy.en[key] || key;
 
 const reader = createReader({ getSettings: () => settings, sendToTab: sendToPanelTab, toast: showToast, showSettings: () => switchTab("settings"), getConnectionDraft: openaiSettingsDraft, chinese: () => uiLanguage === "zh" });
-Object.assign(copy.en, { readSource: "Read aloud", readAloud: "Read aloud", readHint: "Listen to selected text or the article body.", readPage: "Read article", readSelection: "Read selection", speechSettings: "OpenAI · Read aloud", speechHint: "Uses the API connection configured for OpenAI translation. AI-generated voice.", speechKeyHint: "Shares the endpoint and API key from OpenAI translation. Choose only the reading model, voice and speed here.", voice: "Voice", speechRate: "Playback speed", voicePreview: "Preview voice", previewHint: "Preview uses these choices and incurs API usage. Save settings to use them for reading.", stopReading: "Stop", previousPart: "Previous", nextPart: "Next", readerNote: "AI-generated voice · Keep this panel open while listening." });
-Object.assign(copy.zh, { readSource: "朗读原文", readAloud: "朗读", readHint: "朗读选中的段落，或按顺序朗读文章正文。", readPage: "朗读整篇文章", readSelection: "朗读选中段落", speechSettings: "OpenAI · 朗读设置", speechHint: "共用翻译中的 OpenAI API 配置，声音由 AI 合成。", speechKeyHint: "接口地址和 API Key 与 OpenAI 翻译共用，这里只需选择朗读模型、音色和速度。", voice: "音色", speechRate: "播放速度", voicePreview: "试听当前音色", previewHint: "试听使用当前选项并产生 API 用量；保存设置后用于网页朗读。", stopReading: "停止", previousPart: "上一段", nextPart: "下一段", readerNote: "AI 合成语音 · 朗读时请保持侧边栏打开。" });
+Object.assign(copy.en, { readSource: "Read aloud", readAloud: "Read aloud", readHint: "Listen to selected text or the article body.", readPage: "Read article", readSelection: "Read selection", speechSettings: "OpenAI · Read aloud", speechHint: "Uses the API connection configured for OpenAI translation. AI-generated voice.", speechKeyHint: "Uses the same service and API key as OpenAI translation. Choose only the reading model, voice and speed here.", voice: "Voice", speechRate: "Playback speed", voicePreview: "Preview voice", previewHint: "Preview uses these choices and incurs API usage. Save settings to use them for reading.", stopReading: "Stop", previousPart: "Previous", nextPart: "Next", readerNote: "AI-generated voice · Keep this panel open while listening." });
+Object.assign(copy.zh, { readSource: "朗读原文", readAloud: "朗读", readHint: "朗读选中的段落，或按顺序朗读文章正文。", readPage: "朗读整篇文章", readSelection: "朗读选中段落", speechSettings: "OpenAI · 朗读设置", speechHint: "共用翻译中的 OpenAI API 配置，声音由 AI 合成。", speechKeyHint: "与 OpenAI 翻译共用服务地址和 API Key，这里只需选择朗读模型、音色和速度。", voice: "音色", speechRate: "播放速度", voicePreview: "试听当前音色", previewHint: "试听使用当前选项并产生 API 用量；保存设置后用于网页朗读。", stopReading: "停止", previousPart: "上一段", nextPart: "下一段", readerNote: "AI 合成语音 · 朗读时请保持侧边栏打开。" });
 
 Object.assign(copy.en, { keyboardShortcuts: "Keyboard shortcuts", keyboardShortcutsHint: "Use the current selection, or the page. Press Read again to pause or resume.", shortcutSelection: "Translate selection / page", shortcutRead: "Read / pause / resume", shortcutPage: "Translate / restore page", configureShortcuts: "Change shortcuts", shortcutUnassigned: "Not assigned", shortcutUnavailable: "Unavailable", shortcutsOpenFailed: "Open chrome://extensions/shortcuts to change shortcuts." });
 Object.assign(copy.zh, { keyboardShortcuts: "键盘快捷键", keyboardShortcutsHint: "优先处理选中文字，无选区时处理网页；朗读中再次按下可暂停或继续。", shortcutSelection: "翻译选区 / 网页", shortcutRead: "朗读 / 暂停 / 继续", shortcutPage: "翻译 / 恢复网页", configureShortcuts: "修改快捷键", shortcutUnassigned: "未设置", shortcutUnavailable: "无法读取", shortcutsOpenFailed: "请打开 chrome://extensions/shortcuts 修改快捷键。" });
@@ -299,11 +301,14 @@ function fillSettingsForm(values = settings) {
   reader.fill(values);
   selectedProvider = values.provider;
   $("#openai-connection").value = values.openaiConnection;
+  if ($("#openai-endpoint").value !== values.openaiEndpoint || $("#openai-key").value !== values.openaiApiKey) {
+    invalidateOpenAiApiModels();
+  }
   $("#openai-endpoint").value = values.openaiEndpoint;
   $("#openai-key").value = values.openaiApiKey;
   $("#openai-model").value = values.openaiModel;
-  $("#openai-fast").checked = values.openaiFastMode === true;
-  updateOpenAiFast();
+  $("#openai-service-tier").value = values.openaiServiceTier;
+  updateOpenAiServiceTiers();
   $("#openai-effort").replaceChildren(
     new Option(t("openaiEffortDefault"), ""),
     ...OPENAI_REASONING_EFFORTS.map((effort) => new Option(effort === "none" ? t("openaiEffortNone") : effort, effort))
@@ -391,14 +396,14 @@ function updateOpenAiConnection() {
   $("#openai-api-config").hidden = cli;
 }
 
-function updateOpenAiFast() {
-  const supported = supportsOpenAiFast($("#openai-model").value);
-  const toggle = $("#openai-fast");
-  toggle.disabled = !supported;
-  if (!supported) toggle.checked = false;
-  let official = false;
-  try { official = new URL($("#openai-endpoint").value).origin === "https://api.openai.com"; } catch { /* Incomplete input. */ }
-  $("#openai-fast-hint").textContent = t(!supported ? "openaiFastUnavailable" : official ? "openaiFastHint" : "openaiFastCompatibleHint");
+function updateOpenAiServiceTiers() {
+  const select = $("#openai-service-tier");
+  const tiers = openAiTranslationTiers($("#openai-model").value, $("#openai-endpoint").value);
+  for (const option of select.options) option.disabled = !tiers.includes(option.value);
+  if (!tiers.includes(select.value)) select.value = "default";
+  select.disabled = tiers.length === 1;
+  const hint = tiers.includes("ultrafast") ? "openaiUltrafastHint" : tiers.includes("fast") ? "openaiFastHint" : "openaiTierUnavailable";
+  $("#openai-service-tier-hint").textContent = t(hint);
 }
 
 function invalidateOpenAiApiModels() {
@@ -434,7 +439,7 @@ function openaiSettingsDraft() {
     openaiApiKey: $("#openai-key").value.trim(),
     openaiModel: $("#openai-model").value.trim(),
     openaiReasoningEffort: $("#openai-effort").value,
-    openaiFastMode: !$("#openai-fast").disabled && $("#openai-fast").checked,
+    openaiServiceTier: $("#openai-service-tier").value,
     codexModel: $("#codex-model").value,
     codexReasoningEffort: $("#codex-effort").value
   };
@@ -443,7 +448,7 @@ function openaiSettingsDraft() {
 function hasUnsavedOpenAiSettings() {
   if (selectedProvider !== "openai") return false;
   const draft = openaiSettingsDraft();
-  const keys = draft.openaiConnection === "cli" ? ["codexModel", "codexReasoningEffort"] : ["openaiEndpoint", "openaiApiKey", "openaiModel", "openaiReasoningEffort", "openaiFastMode"];
+  const keys = draft.openaiConnection === "cli" ? ["codexModel", "codexReasoningEffort"] : ["openaiEndpoint", "openaiApiKey", "openaiModel", "openaiReasoningEffort", "openaiServiceTier"];
   return settings.provider !== "openai" || ["openaiConnection", ...keys].some((key) => draft[key] !== settings[key]);
 }
 
@@ -901,7 +906,10 @@ async function persistSettings() {
   try {
     if (selectedProvider === "openai") {
       if (draft.openaiConnection === "cli" && (!draft.codexModel || !draft.codexReasoningEffort)) throw new Error(t("codexSelect"));
-      if (draft.openaiConnection === "api" && (!draft.openaiEndpoint || !draft.openaiApiKey || !draft.openaiModel)) throw new Error(t("openaiApiSelect"));
+      if (draft.openaiConnection === "api") {
+        if (!draft.openaiEndpoint || !draft.openaiApiKey || !draft.openaiModel) throw new Error(t("openaiApiSelect"));
+        if (isUnsupportedTranslationModel(draft.openaiModel, openaiTranslationUrl(draft.openaiEndpoint))) throw new Error(t("openaiResponsesModelRequired"));
+      }
     }
     if (selectedProvider === "kimi") {
       if (draft.kimiConnection === "cli" && !draft.kimiCliModel) throw new Error(t("kimiSelect"));
@@ -991,8 +999,8 @@ function wireEvents() {
   $("#openai-connection").addEventListener("change", updateOpenAiConnection);
   $("#openai-api-connect").addEventListener("click", detectOpenAiApi);
   $("#openai-endpoint").addEventListener("input", invalidateOpenAiApiModels);
-  $("#openai-endpoint").addEventListener("input", updateOpenAiFast);
-  $("#openai-model").addEventListener("input", updateOpenAiFast);
+  $("#openai-endpoint").addEventListener("input", updateOpenAiServiceTiers);
+  $("#openai-model").addEventListener("input", updateOpenAiServiceTiers);
   $("#openai-key").addEventListener("input", invalidateOpenAiApiModels);
   $("#kimi-connection").addEventListener("change", updateKimiConnection);
   $("#kimi-cli-connect").addEventListener("click", detectKimiCli);
