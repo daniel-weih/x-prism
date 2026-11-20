@@ -25,6 +25,7 @@ window.addEventListener("error", (event) => uncaught.push(event.message));
 function createChrome({ send, detect, settings = {} } = {}) {
   return {
     runtime: {
+      getManifest: () => ({ version: "0.0.1" }),
       id: "prism-test-only", getURL: path => `about:blank?${path.split("?")[1] || ""}`, onMessage: eventHook(),
       sendMessage(message) {
         if (send) { const result = send(message); if (result !== undefined) return result; }
@@ -95,6 +96,39 @@ async function showSelectionMenu(node = $("#word"), pointer) {
 }
 
 const cases = [
+  ["XML 订阅页加载内容脚本时保留原文档且不报错", async () => {
+    const frame = document.createElement("iframe");
+    frame.hidden = true;
+    const url = URL.createObjectURL(new Blob(['<rss version="2.0"><channel><title>Updates</title></channel></rss>'], { type: "application/xml" }));
+    try {
+      await new Promise(resolve => {
+        frame.onload = resolve;
+        frame.src = url;
+        document.body.append(frame);
+      });
+      const doc = frame.contentDocument;
+      const win = frame.contentWindow;
+      check(doc.contentType === "application/xml", "测试页必须是 XML 文档");
+      const root = doc.documentElement;
+      const original = root.outerHTML;
+      let error;
+      win.addEventListener("error", event => { error = event.message; });
+      win.chrome = createChrome();
+      const script = doc.createElementNS("http://www.w3.org/1999/xhtml", "script");
+      script.src = new URL("../content/content.js", location.href).href;
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = reject;
+        root.append(script);
+      });
+      script.remove();
+      check(!error, error);
+      check(!win[MARKER] && doc.documentElement.outerHTML === original, "XML 文档应保持原样");
+    } finally {
+      frame.remove();
+      URL.revokeObjectURL(url);
+    }
+  }],
   ["朗读命令使用当前选区，重复按键控制同一会话，新选区重启朗读", async () => {
     const controls = [];
     await fresh({ send(message) {
@@ -462,6 +496,7 @@ const cases = [
     check(!oldHost.isConnected, "旧浮窗应移除");
     check(old.runtime.onMessage.listeners.size === 0 && old.storage.onChanged.listeners.size === 0, "旧监听器应移除");
     const host = $("#prism-translate-host"); await inject(mock);
+    check(host.dataset.prismVersion === mock.runtime.getManifest().version, "网页工具栏应标记当前扩展版本");
     check(host === $("#prism-translate-host") && mock.runtime.onMessage.listeners.size === 1, "健康实例应复用");
     await expectTranslation();
   }],

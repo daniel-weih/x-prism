@@ -34,3 +34,5 @@
 1.7.2 将朗读设置移入 OpenAI 配置，仅选中 OpenAI 时显示。Kimi 开放平台和订阅 API 检测仅更新候选模型，不再自动填入第一项；已填写或保存的模型保持不变。
 
 1.8.0 OpenAI 全球官方接口的文本翻译统一使用 Responses API，支持标准、Fast 和 Ultrafast 三个服务档位。已保存的全球官方 Chat Completions 地址自动迁移，原有 Fast 选择保留。官方接口的翻译候选列表仅展示已知支持 Responses API 的文本模型。
+
+1.8.1 修复打开 XML 订阅页时出现的 `prismVersion` 错误。网页工具栏仅在 HTML 文档中初始化，版本标记取自扩展清单。

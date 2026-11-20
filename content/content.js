@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  // Chromium also injects this script into XML feeds and standalone SVGs.
+  if (!(document instanceof HTMLDocument)) return;
+
   const RUNTIME_MARKER = "__prismTranslateContentRuntimeV1";
   const previous = globalThis[RUNTIME_MARKER];
   if (previous?.isAlive?.()) return;
@@ -63,7 +66,7 @@
 
   const host = document.createElement("div");
   host.id = "prism-translate-host";
-  host.dataset.prismVersion = "1.5.0";
+  host.dataset.prismVersion = runtime.getManifest().version;
   const shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = `
     <style>
