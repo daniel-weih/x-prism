@@ -2,8 +2,7 @@ import { SPEECH_MODELS, speechVoices } from "./speech.js";
 import { OPENAI_ORIGIN, isUnsupportedTranslationModel, openAiTranslationTiers, openaiTranslationUrl } from "./openai-api.js";
 export const STORAGE_KEYS = Object.freeze({
   settings: "prismSettings",
-  secrets: "prismSecrets",
-  history: "prismHistory"
+  secrets: "prismSecrets"
 });
 
 export const SECRET_SETTING_KEYS = Object.freeze([
@@ -26,20 +25,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
   pageMode: "bilingual",
   showSelectionBubble: true,
   autoTranslateSelection: false,
-  saveHistory: true,
   uiLanguage: "auto",
   theme: "system",
   maxPageSegments: 240,
-  openaiConnection: "api",
   openaiEndpoint: `${OPENAI_ORIGIN}/v1/responses`,
   openaiApiKey: "",
   openaiModel: "",
   openaiReasoningEffort: "",
   openaiServiceTier: "default",
-  codexModel: "",
-  codexReasoningEffort: "",
   kimiConnection: "code",
-  kimiCliModel: "",
   kimiApiRegion: "cn",
   kimiApiKey: "",
   kimiApiModel: "",
@@ -58,22 +52,16 @@ export const PROVIDERS = Object.freeze([
     badge: "ON-DEVICE"
   },
   {
-    id: "mymemory",
-    name: "MyMemory",
-    local: false,
-    badge: "NO KEY"
-  },
-  {
     id: "openai",
     name: "OpenAI",
     local: false,
-    badge: "API / CLI"
+    badge: "API"
   },
   {
     id: "kimi",
     name: "Kimi",
     local: false,
-    badge: "API / CLI"
+    badge: "API"
   }
 ]);
 
@@ -102,7 +90,6 @@ export const LANGUAGES = Object.freeze([
   ["uk", "Ukrainian", "乌克兰语"]
 ]);
 
-export const MAX_HISTORY_ITEMS = 100;
 export const MAX_SINGLE_TEXT_LENGTH = 12_000;
 
 export function normalizeSettings(value = {}) {
@@ -111,30 +98,24 @@ export function normalizeSettings(value = {}) {
   if (!speechVoices(merged.speechModel).includes(merged.speechVoice)) merged.speechVoice = speechVoices(merged.speechModel)[0];
   if (![0.75, 1, 1.25, 1.5, 2].includes(Number(merged.speechRate))) merged.speechRate = 1;
   else merged.speechRate = Number(merged.speechRate);
+  let wasOfficialEndpoint = false;
   try {
-    const endpoint = openaiTranslationUrl(merged.openaiEndpoint);
-    if (endpoint.origin === OPENAI_ORIGIN) {
-      merged.openaiEndpoint = endpoint.href;
-      if (isUnsupportedTranslationModel(merged.openaiModel, endpoint)) merged.openaiModel = "";
-      // The retired speech key was issued for the official service.
-      if (!String(merged.openaiApiKey || "").trim() && value.speechApiKey) merged.openaiApiKey = value.speechApiKey;
-    }
-  } catch { /* Keep invalid endpoint handling in the API settings. */ }
+    const raw = new URL(String(merged.openaiEndpoint || "").trim());
+    wasOfficialEndpoint = raw.origin === OPENAI_ORIGIN && !raw.username && !raw.password && !raw.hash;
+  } catch { /* Non-URL values are reset below. */ }
+  merged.openaiEndpoint = DEFAULT_SETTINGS.openaiEndpoint;
+  if (isUnsupportedTranslationModel(merged.openaiModel, openaiTranslationUrl(merged.openaiEndpoint))) merged.openaiModel = "";
+  // The retired speech key was issued for the official service.
+  if (wasOfficialEndpoint && !String(merged.openaiApiKey || "").trim() && value.speechApiKey) merged.openaiApiKey = value.speechApiKey;
   delete merged.speechApiKey;
-  // Before 1.4, "codex" was CLI-only and "openai" was API-only.
-  if (value.provider === "codex") {
-    merged.provider = "openai";
-    merged.openaiConnection = "cli";
-  } else if (!["cli", "api"].includes(value.openaiConnection)) {
-    merged.openaiConnection = value.provider === "openai" ? "api" : DEFAULT_SETTINGS.openaiConnection;
-  }
+  if (value.provider === "codex") merged.provider = "openai";
   if (!OPENAI_REASONING_EFFORTS.includes(merged.openaiReasoningEffort)) merged.openaiReasoningEffort = "";
   const tier = value.openaiServiceTier ?? (value.openaiFastMode === true ? "fast" : "default");
   merged.openaiServiceTier = openAiTranslationTiers(merged.openaiModel, merged.openaiEndpoint).includes(tier) ? tier : "default";
   delete merged.openaiFastMode;
-  // Retired provider settings must not leak back into sync when splitting secrets.
-  for (const key of ["deeplApiKey", "deeplUseFree", "libreEndpoint", "libreApiKey"]) delete merged[key];
-  if (!["cli", "api", "code"].includes(merged.kimiConnection)) merged.kimiConnection = DEFAULT_SETTINGS.kimiConnection;
+  // Retired provider, local-CLI, and history settings must not leak back into sync when splitting secrets.
+  for (const key of ["deeplApiKey", "deeplUseFree", "libreEndpoint", "libreApiKey", "openaiConnection", "codexModel", "codexReasoningEffort", "kimiCliModel", "saveHistory"]) delete merged[key];
+  if (!["api", "code"].includes(merged.kimiConnection)) merged.kimiConnection = DEFAULT_SETTINGS.kimiConnection;
   if (!["cn", "global"].includes(merged.kimiApiRegion)) merged.kimiApiRegion = "cn";
   if (!["cn", "global"].includes(merged.kimiCodeRegion)) merged.kimiCodeRegion = "cn";
   merged.maxPageSegments = Math.min(

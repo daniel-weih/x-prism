@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
 import { kimiTranslationBody, translateKimiApi, listKimiApiModels, parseKimiTranslations } from '../shared/kimi-api.js';
-import { KimiClient, parseKimiPrintOutput } from '../native/kimi-client.mjs';
-import { requestKimi } from '../shared/kimi.js';
 import { ensureDefaults, saveSettings, getSettings } from '../shared/storage.js';
 
 const settings = { kimiApiRegion: 'cn', kimiApiKey: 'test-only-key', kimiApiModel: 'kimi-k3', kimiApiThinking: 'low' };
@@ -66,67 +63,34 @@ test('Kimi API model discovery uses the chosen account and does not invent model
   await assert.rejects(listKimiApiModels(settings, async () => jsonResponse({ data: [] })), /未返回可用模型/);
 });
 
-test('Kimi print output accepts final assistant JSON and rejects tool calls and missing translations', () => {
-  const output = [JSON.stringify({ role: 'user', content: 'hello' }), JSON.stringify({ role: 'assistant', content: '{"translations":["你好"]}' })].join('\n');
-  assert.deepEqual(parseKimiPrintOutput(output, 1), ['你好']);
-  assert.throws(() => parseKimiPrintOutput(JSON.stringify({ role: 'assistant', tool_calls: [{ name: 'shell' }] }) + '\n' + output, 1), /不允许调用工具/);
-  assert.throws(() => parseKimiPrintOutput(output, 2), /不完整/);
-});
-
-test('missing Kimi executable fails promptly and removes its temporary directory', async () => {
-  const client = new KimiClient('/missing/prism-kimi-binary');
-  try { await assert.rejects(client.start(), /无法启动 Kimi/); }
-  finally { await client.close(); }
-  await assert.rejects(access(client.cwd));
-});
-
-test('Kimi native ports close after result, disconnect and timeout', async () => {
-  for (const mode of ['success', 'disconnect', 'timeout']) {
-    let reply, disconnect, closed = 0;
-    const runtime = { lastError: undefined, connectNative(name) {
-      assert.equal(name, 'com.prism_translate.kimi');
-      return { onMessage: { addListener(fn) { reply = fn; } }, onDisconnect: { addListener(fn) { disconnect = fn; } },
-        disconnect() { closed++; }, postMessage() { queueMicrotask(() => {
-          if (mode === 'success') reply({ ok: true, result: { translations: ['你好'] } });
-          if (mode === 'disconnect') { runtime.lastError = { message: 'host missing' }; disconnect(); }
-        }); } };
-    } };
-    if (mode === 'success') assert.deepEqual(await requestKimi({}, runtime, 20), { translations: ['你好'] });
-    else await assert.rejects(requestKimi({}, runtime, 20), mode === 'timeout' ? /超时/ : /host missing/);
-    assert.equal(closed, 1);
-  }
-});
-
-test('Kimi settings retain independent models, migrate secrets locally and preserve unrelated engines', async () => {
-  const memory = { sync: { prismSettings: { provider: 'codex', codexModel: 'saved-codex', kimiApiKey: 'old-key' } }, local: {} };
+test('Kimi settings migrate secrets locally, retire CLI fields, and normalize cli connection to code', async () => {
+  const memory = { sync: { prismSettings: { provider: 'codex', codexModel: 'saved-codex', kimiConnection: 'cli', kimiCliModel: 'kimi-code/k3', kimiApiKey: 'old-key' } }, local: {} };
   const area = name => ({ get: async key => ({ [key]: memory[name][key] }), set: async patch => Object.assign(memory[name], structuredClone(patch)) });
   globalThis.chrome = { storage: { sync: area('sync'), local: area('local') } };
   try {
     await ensureDefaults();
     assert.equal(memory.local.prismSecrets.kimiApiKey, 'old-key');
     assert.ok(!('kimiApiKey' in memory.sync.prismSettings));
-    await saveSettings({ provider: 'kimi', kimiConnection: 'cli', kimiCliModel: 'kimi-code/k3', ...settings });
-    await saveSettings({ kimiConnection: 'api' });
+    await saveSettings({ provider: 'kimi', kimiConnection: 'api', ...settings });
     const saved = await getSettings();
-    assert.equal(saved.kimiCliModel, 'kimi-code/k3'); assert.equal(saved.kimiApiModel, 'kimi-k3'); assert.equal(saved.codexModel, 'saved-codex');
+    assert.equal(saved.kimiApiModel, 'kimi-k3');
+    for (const retired of ['kimiCliModel', 'codexModel', 'codexReasoningEffort', 'openaiConnection']) {
+      assert.ok(!(retired in saved));
+      assert.ok(!(retired in memory.sync.prismSettings));
+    }
     assert.ok(!JSON.stringify(memory.sync).includes('test-only-key'));
     assert.equal(memory.local.prismSecrets.kimiApiKey, 'test-only-key');
   } finally { delete globalThis.chrome; }
 });
 
-test('background routes Kimi selection/page requests through saved mode and enforces API host access', async () => {
+test('background routes Kimi selection/page requests through saved API mode and enforces host access', async () => {
   const noEvent = { addListener() {} };
-  let listener, permit = true, nativePayload, apiCalls = 0;
-  const saved = { provider: 'kimi', kimiConnection: 'cli', kimiCliModel: 'kimi-code/k3', ...settings };
+  let listener, permit = true, apiCalls = 0;
+  const saved = { provider: 'kimi', kimiConnection: 'api', ...settings };
   const originalFetch = globalThis.fetch;
   globalThis.chrome = {
     runtime: { id: 'prism-test', getURL: path => `chrome-extension://prism-test/${path}`, onInstalled: noEvent, onStartup: noEvent,
-      onMessage: { addListener(fn) { listener = fn; } },
-      connectNative(name) {
-        assert.equal(name, 'com.prism_translate.kimi'); let reply;
-        return { onMessage: { addListener(fn) { reply = fn; } }, onDisconnect: noEvent, disconnect() {},
-          postMessage(payload) { nativePayload = payload; queueMicrotask(() => reply({ ok: true, result: { translations: payload.texts.map(() => '本机译文') } })); } };
-      } },
+      onMessage: { addListener(fn) { listener = fn; } } },
     contextMenus: { onClicked: noEvent }, commands: { onCommand: noEvent },
     tabs: { onCreated: noEvent, onReplaced: noEvent, onRemoved: noEvent },
     storage: { sync: { get: async () => ({ prismSettings: saved }) }, local: { get: async () => ({ prismSecrets: { kimiApiKey: 'saved-key', kimiCodeKey: 'saved-code-key' } }) } },
@@ -140,11 +104,9 @@ test('background routes Kimi selection/page requests through saved mode and enfo
   try {
     await import('../background.js');
     const sender = { id: 'prism-test', url: 'https://example.test' };
+    const extensionSender = { id: 'prism-test', url: 'chrome-extension://prism-test/sidepanel/sidepanel.html' };
     const message = { type: 'PRISM_REMOTE_TRANSLATE', provider: 'kimi', texts: ['hello'], sourceLanguage: 'en', targetLanguage: 'zh', apiKey: 'ignored-message-key' };
     const send = () => new Promise(resolve => assert.equal(listener(message, sender, resolve), true));
-    assert.deepEqual(await send(), { ok: true, translations: ['本机译文'] });
-    assert.equal(nativePayload.model, 'kimi-code/k3'); assert.equal(nativePayload.apiKey, undefined);
-    saved.kimiConnection = 'api';
     assert.deepEqual(await send(), { ok: true, translations: ['接口译文'] });
     permit = false;
     const denied = await send(); assert.equal(denied.ok, false); assert.match(denied.error, /允许访问/); assert.equal(apiCalls, 1);
@@ -152,6 +114,9 @@ test('background routes Kimi selection/page requests through saved mode and enfo
     const removed = await send(); assert.equal(removed.ok, false); assert.match(removed.error, /no longer available/); assert.equal(apiCalls, 1);
     assert.equal(listener(message, { id: 'other-extension' }, () => {}), false);
     assert.equal(listener({ type: 'PRISM_KIMI_MODELS', connection: 'api' }, sender, () => {}), false);
+    let cliReply;
+    assert.equal(listener({ type: 'PRISM_KIMI_MODELS', connection: 'cli' }, extensionSender, (r) => { cliReply = r; }), false);
+    assert.equal(cliReply.ok, false);
     Object.assign(saved, { kimiConnection: 'code', kimiCodeRegion: 'global', kimiCodeModel: 'k3' });
     message.provider = 'kimi';
     assert.equal((await send()).ok, false); assert.equal(apiCalls, 1);
@@ -162,16 +127,16 @@ test('background routes Kimi selection/page requests through saved mode and enfo
   } finally { globalThis.fetch = originalFetch; delete globalThis.chrome; }
 });
 
-test('retiring engines clears obsolete keys from both stores and keeps remaining engines intact', async () => {
+test('retiring engines clears obsolete keys and CLI fields from both stores while keeping remaining engines intact', async () => {
   const memory = { sync: { prismSettings: { provider: 'libre', libreEndpoint: 'https://old.test/translate', deeplUseFree: true, deeplApiKey: 'old-synced-secret', kimiCliModel: 'kimi-code/k3' } }, local: { prismSecrets: { libreApiKey: 'old-secret', deeplApiKey: 'old-deepl-secret', kimiApiKey: 'keep-kimi', openaiApiKey: 'keep-openai' } } };
   const area = name => ({ get: async key => ({ [key]: memory[name][key] }), set: async patch => Object.assign(memory[name], structuredClone(patch)) });
   globalThis.chrome = { storage: { sync: area('sync'), local: area('local') } };
   try {
     await ensureDefaults();
     const saved = await getSettings();
-    assert.equal(saved.provider, 'chrome'); assert.equal(saved.kimiCliModel, 'kimi-code/k3');
+    assert.equal(saved.provider, 'chrome');
     assert.equal(saved.kimiApiKey, 'keep-kimi'); assert.equal(saved.openaiApiKey, 'keep-openai');
-    for (const key of ['libreEndpoint','libreApiKey','deeplApiKey','deeplUseFree']) {
+    for (const key of ['libreEndpoint','libreApiKey','deeplApiKey','deeplUseFree','kimiCliModel','codexModel','codexReasoningEffort','openaiConnection']) {
       assert.ok(!(key in saved)); assert.ok(!(key in memory.sync.prismSettings)); assert.ok(!(key in memory.local.prismSecrets));
     }
     await saveSettings({ provider: 'deepl' });
@@ -211,7 +176,7 @@ test('subscription settings survive mode switches with both keys excluded from s
   try {
     await ensureDefaults();
     await saveSettings({ ...settings, kimiConnection: 'code', kimiCodeRegion: 'global', kimiCodeKey: 'subscription-test-key', kimiCodeModel: 'k3', kimiCodeThinking: 'high' });
-    for (const kimiConnection of ['api', 'cli', 'code']) {
+    for (const kimiConnection of ['api', 'code']) {
       await saveSettings({ kimiConnection }); await ensureDefaults();
       const saved = await getSettings();
       assert.equal(saved.kimiConnection, kimiConnection);

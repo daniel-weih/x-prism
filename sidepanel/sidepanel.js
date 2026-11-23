@@ -1,16 +1,14 @@
 import { createReader } from "./reader.js";
 import { LANGUAGES, OPENAI_REASONING_EFFORTS, PROVIDERS } from "../shared/config.js";
 import { kimiApiSettings, kimiApiBase, kimiThinkingOptions } from "../shared/kimi-api.js";
-import { openaiApiOrigin, openAiTranslationTiers, openaiTranslationUrl, isUnsupportedTranslationModel } from "../shared/openai-api.js";
+import { OPENAI_RESPONSES_URL, openaiApiOrigin, openAiTranslationTiers, openaiTranslationUrl, isUnsupportedTranslationModel } from "../shared/openai-api.js";
 import { panelTabId, pendingActionKey } from "../shared/side-panel.js";
 import {
   ensureDefaults,
-  getHistory,
   getSettings,
   subscribeToSettings,
   saveSettings
 } from "../shared/storage.js";
-import { addHistory, clearHistory, removeHistoryItem, toggleFavorite } from "../shared/history-client.js";
 import { hasLocalTranslator, translateMany, translateText } from "../shared/translator.js";
 import {
   TAB_ACCESS_ERROR,
@@ -42,7 +40,7 @@ const copy = {
     codexDetecting: "Connecting to Codex…", codexReady: "Connected", codexNotChecked: "Detect connection to load available models.", codexChoose: "Detect connection first", codexUnavailable: "Saved selection unavailable — choose again",
     openaiSaveFirst: "Save OpenAI settings before translating.", codexSelect: "Detect connection and choose a valid model and reasoning effort first.",
     openaiCli: "Local Codex CLI", openaiApi: "API", openaiDetecting: "Connecting to OpenAI API…",
-    openaiApiHint: "Use an API key independently of your Codex CLI login. OpenAI-compatible services are also supported.",
+    openaiApiHint: "Use an official OpenAI API key.",
     openaiApiSelect: "Enter the API endpoint, API key and model first.",
     openaiResponsesModelRequired: "Choose a Responses API text model for translation.",
     openaiModelHint: "Choose a text chat model. If model detection is unavailable, enter the model ID manually.",
@@ -84,8 +82,7 @@ const copy = {
     translationTimedOut: "Translation timed out. Try less text or a lower reasoning effort.",
     swap: "Swap languages",
     openSettings: "Open settings",
-    localEngineHint: "Text is translated on this device. Chrome may download a local language pack the first time you use a language pair.",
-    myMemoryHint: "An online service with no API key. Text is sent to MyMemory; daily usage limits apply."
+    localEngineHint: "Text is translated on this device. Chrome may download a local language pack the first time you use a language pair."
   },
   zh: {
     brandSubtitle: "网页翻译与朗读", tabTranslate: "翻译", tabPage: "网页", tabHistory: "历史", tabSettings: "设置",
@@ -109,7 +106,7 @@ const copy = {
     codexDetecting: "正在连接 Codex…", codexReady: "已连接", codexNotChecked: "检测连接后加载本机可用模型。", codexChoose: "请先检测连接", codexUnavailable: "已保存的选项不可用，请重新选择",
     openaiSaveFirst: "请先保存 OpenAI 设置，再开始翻译。", codexSelect: "请先检测连接，选择有效的模型和推理强度。",
     openaiCli: "本机 Codex CLI", openaiApi: "API", openaiDetecting: "正在连接 OpenAI API…",
-    openaiApiHint: "使用 API Key，与 Codex CLI 登录独立；也支持 OpenAI 兼容服务。",
+    openaiApiHint: "使用官方 OpenAI API Key，固定连接 OpenAI 官方接口。",
     openaiApiSelect: "请先填写 API 接口地址、API Key 和模型。",
     openaiResponsesModelRequired: "请选择支持 Responses API 的文本翻译模型。",
     openaiModelHint: "请选择支持文本对话的模型；接口不支持检测时可手动填写模型 ID。",
@@ -151,8 +148,7 @@ const copy = {
     translationTimedOut: "翻译超时，请缩短文本或降低推理强度后重试。",
     swap: "交换语言",
     openSettings: "打开设置",
-    localEngineHint: "文字在本机翻译。首次使用某组语言时，Chrome 可能需要下载对应的本地语言包。",
-    myMemoryHint: "无需 API Key 的在线翻译服务。原文会发送至 MyMemory，服务有每日使用额度。"
+    localEngineHint: "文字在本机翻译。首次使用某组语言时，Chrome 可能需要下载对应的本地语言包。"
   }
 };
 
@@ -160,11 +156,7 @@ let settings;
 let uiLanguage = "en";
 let selectedProvider = "chrome";
 let lastResult = null;
-let history = [];
-let favoritesOnly = false;
 let toastTimer;
-let codexModels = [];
-let kimiCliModels = [];
 let kimiApiRequest = 0;
 let openaiApiRequest = 0;
 let inputRequest = 0;
@@ -237,7 +229,6 @@ function switchTab(name) {
     button.setAttribute("aria-pressed", String(button.dataset.tab === name));
   });
   $$(".panel").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === name));
-  if (name === "history") renderHistory();
   if (name === "page") refreshPageState();
   if (name === "settings") { updateSettingsSaveBar(); void refreshShortcuts(); }
 }
@@ -261,7 +252,7 @@ function populateLanguageMenus() {
 
 function updateProviderStatus() {
   const provider = PROVIDERS.find(({ id }) => id === settings.provider) || PROVIDERS[0];
-  const badge = provider.id === "openai" ? `OPENAI ${settings.openaiConnection.toUpperCase()}`
+  const badge = provider.id === "openai" ? "OPENAI API"
     : provider.id === "kimi" ? `KIMI ${settings.kimiConnection.toUpperCase()}` : provider.badge;
   $("#provider-status b").textContent = provider.id === "chrome" && !hasLocalTranslator() ? t("localUnavailable") : badge;
   $("#provider-status").classList.toggle("unavailable", provider.id === "chrome" && !hasLocalTranslator());
@@ -300,7 +291,6 @@ function updateProviderConfig() {
 function fillSettingsForm(values = settings) {
   reader.fill(values);
   selectedProvider = values.provider;
-  $("#openai-connection").value = values.openaiConnection;
   if ($("#openai-endpoint").value !== values.openaiEndpoint || $("#openai-key").value !== values.openaiApiKey) {
     invalidateOpenAiApiModels();
   }
@@ -314,12 +304,7 @@ function fillSettingsForm(values = settings) {
     ...OPENAI_REASONING_EFFORTS.map((effort) => new Option(effort === "none" ? t("openaiEffortNone") : effort, effort))
   );
   $("#openai-effort").value = values.openaiReasoningEffort;
-  populateCodexModels(values.codexModel, values.codexReasoningEffort);
-  $("#codex-install-command").textContent = `node scripts/install-codex-host.mjs ${chrome.runtime.id}`;
-  if (!$("#codex-status").textContent) $("#codex-status").textContent = t("codexNotChecked");
-  updateOpenAiConnection();
   $("#kimi-connection").value = values.kimiConnection;
-  populateKimiCliModels(values.kimiCliModel);
   $("#kimi-api-region").value = values.kimiApiRegion;
   $("#kimi-api-key").value = values.kimiApiKey;
   $("#kimi-api-model").value = values.kimiApiModel;
@@ -328,13 +313,10 @@ function fillSettingsForm(values = settings) {
   $("#kimi-code-key").value = values.kimiCodeKey;
   $("#kimi-code-model").value = values.kimiCodeModel;
   populateKimiThinking(values.kimiCodeThinking, "code");
-  $("#kimi-install-command").textContent = `node scripts/install-kimi-host.mjs ${chrome.runtime.id}`;
-  if (!$("#kimi-cli-status").textContent) $("#kimi-cli-status").textContent = t("codexNotChecked");
   updateKimiConnection();
   $("#ui-language").value = values.uiLanguage;
   $("#theme").value = values.theme;
   $("#selection-bubble").checked = values.showSelectionBubble;
-  $("#save-history").checked = values.saveHistory;
   $("#page-limit").value = values.maxPageSegments;
   $("#page-limit-value").textContent = values.maxPageSegments;
   renderProviderGrid();
@@ -346,54 +328,6 @@ function fillSettingsForm(values = settings) {
 function setOptions(select, options, selected) {
   select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
   select.value = selected;
-}
-
-function populateCodexModels(preferred = "", preferredEffort = "") {
-  const options = codexModels.map((entry) => [entry.model, entry.displayName || entry.model]);
-  let selected = preferred || codexModels.find((entry) => entry.isDefault)?.model || options[0]?.[0] || "";
-  if (!options.length) options.push([preferred, preferred || t("codexChoose")]);
-  else if (preferred && !codexModels.some((entry) => entry.model === preferred)) {
-    options.unshift(["", t("codexUnavailable")]); selected = "";
-  }
-  setOptions($("#codex-model"), options, selected);
-  $("#codex-model").disabled = !codexModels.length;
-  populateCodexEfforts(preferredEffort);
-}
-
-function populateCodexEfforts(preferred = "") {
-  const model = codexModels.find((entry) => entry.model === $("#codex-model").value);
-  const options = (model?.supportedReasoningEfforts || []).map((entry) => [entry.reasoningEffort, entry.reasoningEffort]);
-  let selected = preferred || (options.some(([value]) => value === "low") ? "low" : model?.defaultReasoningEffort) || "";
-  if (!options.length) options.push([preferred, preferred || t("codexChoose")]);
-  else if (!options.some(([value]) => value === selected)) { options.unshift(["", t("codexUnavailable")]); selected = ""; }
-  setOptions($("#codex-effort"), options, selected);
-  $("#codex-effort").disabled = !model;
-}
-
-async function detectCodex() {
-  const button = $("#codex-connect");
-  button.disabled = true;
-  $("#codex-status").textContent = t("codexDetecting");
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "PRISM_CODEX_MODELS" });
-    if (!response?.ok) throw new Error(response?.error || "Codex unavailable.");
-    if (!response.models?.length) throw new Error(t("codexSelect"));
-    const model = $("#codex-model").value;
-    const effort = $("#codex-effort").value;
-    codexModels = response.models;
-    populateCodexModels(model, effort);
-    $("#codex-status").textContent = `${t("codexReady")} · ${response.version}`;
-  } catch (error) {
-    codexModels = [];
-    populateCodexModels($("#codex-model").value, $("#codex-effort").value);
-    $("#codex-status").textContent = error.message;
-  } finally { button.disabled = false; updateSettingsSaveBar(); }
-}
-
-function updateOpenAiConnection() {
-  const cli = $("#openai-connection").value === "cli";
-  $("#openai-cli-config").hidden = !cli;
-  $("#openai-api-config").hidden = cli;
 }
 
 function updateOpenAiServiceTiers() {
@@ -434,42 +368,25 @@ async function detectOpenAiApi() {
 
 function openaiSettingsDraft() {
   return {
-    openaiConnection: $("#openai-connection").value,
-    openaiEndpoint: $("#openai-endpoint").value.trim(),
+    openaiEndpoint: OPENAI_RESPONSES_URL,
     openaiApiKey: $("#openai-key").value.trim(),
     openaiModel: $("#openai-model").value.trim(),
     openaiReasoningEffort: $("#openai-effort").value,
-    openaiServiceTier: $("#openai-service-tier").value,
-    codexModel: $("#codex-model").value,
-    codexReasoningEffort: $("#codex-effort").value
+    openaiServiceTier: $("#openai-service-tier").value
   };
 }
 
 function hasUnsavedOpenAiSettings() {
   if (selectedProvider !== "openai") return false;
   const draft = openaiSettingsDraft();
-  const keys = draft.openaiConnection === "cli" ? ["codexModel", "codexReasoningEffort"] : ["openaiEndpoint", "openaiApiKey", "openaiModel", "openaiReasoningEffort", "openaiServiceTier"];
-  return settings.provider !== "openai" || ["openaiConnection", ...keys].some((key) => draft[key] !== settings[key]);
+  return settings.provider !== "openai" || ["openaiEndpoint", "openaiApiKey", "openaiModel", "openaiReasoningEffort", "openaiServiceTier"].some((key) => draft[key] !== settings[key]);
 }
 
 function updateKimiConnection() {
-  const cli = $("#kimi-connection").value === "cli";
-  $("#kimi-cli-config").hidden = !cli;
   $("#kimi-api-config").hidden = $("#kimi-connection").value !== "api";
   $("#kimi-code-config").hidden = $("#kimi-connection").value !== "code";
   invalidateKimiApiModels();
   invalidateKimiApiModels("code");
-}
-
-function populateKimiCliModels(preferred = "") {
-  const options = kimiCliModels.map((entry) => [entry.model, entry.displayName || entry.model]);
-  let selected = preferred || kimiCliModels.find((entry) => entry.isDefault)?.model || options[0]?.[0] || "";
-  if (!options.length) options.push([preferred, preferred || t("codexChoose")]);
-  else if (preferred && !kimiCliModels.some((entry) => entry.model === preferred)) {
-    options.unshift(["", t("codexUnavailable")]); selected = "";
-  }
-  setOptions($("#kimi-cli-model"), options, selected);
-  $("#kimi-cli-model").disabled = !kimiCliModels.length;
 }
 
 function populateKimiThinking(preferred, connection = "api") {
@@ -478,23 +395,6 @@ function populateKimiThinking(preferred, connection = "api") {
   const labels = { off: t("thinkingOff"), on: t("thinkingOn"), default: t("thinkingDefault") };
   setOptions($(`#kimi-${connection}-thinking`), values.map((value) => [value, labels[value] || value]), values.includes(preferred) ? preferred : values[0]);
   $(`#kimi-${connection}-thinking`).disabled = values.length === 1;
-}
-
-async function detectKimiCli() {
-  const button = $("#kimi-cli-connect");
-  button.disabled = true;
-  $("#kimi-cli-status").textContent = t("kimiDetecting");
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "PRISM_KIMI_MODELS", connection: "cli" });
-    if (!response?.ok || !response.models?.length) throw new Error(response?.error || t("kimiSelect"));
-    kimiCliModels = response.models;
-    populateKimiCliModels($("#kimi-cli-model").value);
-    $("#kimi-cli-status").textContent = `${t("codexReady")} · ${response.version}`;
-  } catch (error) {
-    kimiCliModels = [];
-    populateKimiCliModels($("#kimi-cli-model").value);
-    $("#kimi-cli-status").textContent = error.message;
-  } finally { button.disabled = false; updateSettingsSaveBar(); }
 }
 
 function invalidateKimiApiModels(connection = "api") {
@@ -533,7 +433,6 @@ async function detectKimiApi(connection = "api") {
 function kimiSettingsDraft() {
   return {
     kimiConnection: $("#kimi-connection").value,
-    kimiCliModel: $("#kimi-cli-model").value,
     kimiApiRegion: $("#kimi-api-region").value,
     kimiApiKey: $("#kimi-api-key").value.trim(),
     kimiApiModel: $("#kimi-api-model").value.trim(),
@@ -548,7 +447,7 @@ function kimiSettingsDraft() {
 function hasUnsavedKimiSettings() {
   if (selectedProvider !== "kimi") return false;
   const draft = kimiSettingsDraft();
-  const keys = draft.kimiConnection === "cli" ? ["kimiCliModel"] : draft.kimiConnection === "code" ? ["kimiCodeRegion", "kimiCodeKey", "kimiCodeModel", "kimiCodeThinking"] : ["kimiApiRegion", "kimiApiKey", "kimiApiModel", "kimiApiThinking"];
+  const keys = draft.kimiConnection === "code" ? ["kimiCodeRegion", "kimiCodeKey", "kimiCodeModel", "kimiCodeThinking"] : ["kimiApiRegion", "kimiApiKey", "kimiApiModel", "kimiApiThinking"];
   return settings.provider !== "kimi" || ["kimiConnection", ...keys].some((key) => draft[key] !== settings[key]);
 }
 
@@ -643,14 +542,6 @@ async function translateInput() {
     $("#result-provider").textContent = ["kimi", "openai"].includes(result.provider) ? result.provider.toUpperCase() : PROVIDERS.find(({ id }) => id === result.provider)?.badge || result.provider;
     $("#model-progress").hidden = true;
     updateResultActions();
-    if (translationSettings.saveHistory) {
-      try {
-        await addHistory(lastResult);
-        history = await getHistory();
-      } catch {
-        if (request === inputRequest) showToast(t("historySaveFailed"));
-      }
-    }
   } catch (error) {
     if (request !== inputRequest) return;
     $("#result-text").textContent = translationError(error);
@@ -823,50 +714,6 @@ function renderPageMode(mode) {
   });
 }
 
-function renderHistory() {
-  const search = $("#history-search").value.trim().toLowerCase();
-  const visible = history.filter((entry) => {
-    if (favoritesOnly && !entry.favorite) return false;
-    return !search || `${entry.sourceText} ${entry.translatedText}`.toLowerCase().includes(search);
-  });
-  const list = $("#history-list");
-  list.replaceChildren();
-  for (const entry of visible) {
-    const article = document.createElement("article");
-    article.className = "history-item surface-card";
-    const route = document.createElement("div"); route.className = "route"; route.textContent = `${entry.sourceLanguage} → ${entry.targetLanguage} · ${entry.provider}`;
-    const original = document.createElement("p"); original.className = "original"; original.textContent = entry.sourceText;
-    const translated = document.createElement("p"); translated.className = "translated"; translated.textContent = entry.translatedText;
-    const tools = document.createElement("div"); tools.className = "history-tools";
-    const favorite = document.createElement("button"); favorite.type = "button"; favorite.textContent = entry.favorite ? "★" : "☆";
-    favorite.title = t(entry.favorite ? "unfavorite" : "favorite");
-    favorite.setAttribute("aria-label", favorite.title);
-    favorite.addEventListener("click", async (event) => { event.stopPropagation(); try { history = await toggleFavorite(entry.id); renderHistory(); } catch { showToast(t("historyFailed")); } });
-    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×";
-    remove.title = t("remove"); remove.setAttribute("aria-label", remove.title);
-    remove.addEventListener("click", async (event) => { event.stopPropagation(); try { history = await removeHistoryItem(entry.id); renderHistory(); } catch { showToast(t("historyFailed")); } });
-    tools.append(favorite, remove); article.append(route, original, translated, tools);
-    article.tabIndex = 0;
-    const open = () => {
-      resetInputResult();
-      $("#source-text").value = entry.sourceText;
-      lastResult = { ...entry };
-      $("#result-text").textContent = entry.translatedText;
-      $("#language-route").textContent = `${entry.sourceLanguage} → ${entry.targetLanguage}`;
-      $("#result-provider").textContent = entry.provider === "codex" ? "OPENAI CLI" : String(entry.provider).toUpperCase();
-      $("#result-card").classList.add("has-result");
-      updateResultActions(); updateCharacterCount(); switchTab("translate");
-    };
-    article.addEventListener("click", open);
-    article.addEventListener("keydown", (event) => { if (event.target === article && ["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
-    list.append(article);
-  }
-  $("#history-empty").style.display = visible.length ? "none" : "block";
-  $("#history-empty h3").textContent = t(search || favoritesOnly ? "noMatches" : "noHistory");
-  $("#history-empty p").textContent = t(search || favoritesOnly ? "noMatchesHint" : "noHistoryHint");
-  $("#clear-history").disabled = !history.length;
-}
-
 function endpointPattern(value) {
   const url = new URL(value);
   if (!/^https?:$/.test(url.protocol)) throw new Error("Only HTTP(S) endpoints are supported.");
@@ -875,7 +722,7 @@ function endpointPattern(value) {
 
 async function requestProviderPermission(provider, draft) {
   const kimiApi = provider === "kimi" && ["api", "code"].includes(draft.kimiConnection);
-  const openaiApi = provider === "openai" && draft.openaiConnection === "api";
+  const openaiApi = provider === "openai";
   if (!kimiApi && !openaiApi) return true;
   const pattern = kimiApi ? endpointPattern(kimiApiBase(kimiApiSettings(draft).kimiApiRegion, draft.kimiConnection)) : openaiApiOrigin(draft.openaiEndpoint);
   if (await chrome.permissions.contains({ origins: [pattern] })) return true;
@@ -893,7 +740,6 @@ function settingsDraft() {
     uiLanguage: $("#ui-language").value,
     theme: $("#theme").value,
     showSelectionBubble: $("#selection-bubble").checked,
-    saveHistory: $("#save-history").checked,
     maxPageSegments: Number($("#page-limit").value)
   };
 }
@@ -905,15 +751,11 @@ async function persistSettings() {
   const draft = settingsDraft();
   try {
     if (selectedProvider === "openai") {
-      if (draft.openaiConnection === "cli" && (!draft.codexModel || !draft.codexReasoningEffort)) throw new Error(t("codexSelect"));
-      if (draft.openaiConnection === "api") {
-        if (!draft.openaiEndpoint || !draft.openaiApiKey || !draft.openaiModel) throw new Error(t("openaiApiSelect"));
-        if (isUnsupportedTranslationModel(draft.openaiModel, openaiTranslationUrl(draft.openaiEndpoint))) throw new Error(t("openaiResponsesModelRequired"));
-      }
+      if (!draft.openaiEndpoint || !draft.openaiApiKey || !draft.openaiModel) throw new Error(t("openaiApiSelect"));
+      if (isUnsupportedTranslationModel(draft.openaiModel, openaiTranslationUrl(draft.openaiEndpoint))) throw new Error(t("openaiResponsesModelRequired"));
     }
     if (selectedProvider === "kimi") {
-      if (draft.kimiConnection === "cli" && !draft.kimiCliModel) throw new Error(t("kimiSelect"));
-      if (["api", "code"].includes(draft.kimiConnection) && (!kimiApiSettings(draft).kimiApiKey || !kimiApiSettings(draft).kimiApiModel)) throw new Error(t("kimiApiSelect"));
+      if (!kimiApiSettings(draft).kimiApiKey || !kimiApiSettings(draft).kimiApiModel) throw new Error(t("kimiApiSelect"));
     }
     const granted = await requestProviderPermission(selectedProvider, draft);
     if (!granted) throw new Error(t("providerPermissionDenied"));
@@ -996,14 +838,10 @@ function wireEvents() {
   chrome.tabs.onUpdated.addListener((tabId, change) => { if (tabId === ownerTabId && (change.status === "loading" || change.url)) reader.stop(); });
   $('[data-panel="settings"]').addEventListener("input", updateSettingsSaveBar);
   $('[data-panel="settings"]').addEventListener("change", updateSettingsSaveBar);
-  $("#openai-connection").addEventListener("change", updateOpenAiConnection);
   $("#openai-api-connect").addEventListener("click", detectOpenAiApi);
-  $("#openai-endpoint").addEventListener("input", invalidateOpenAiApiModels);
-  $("#openai-endpoint").addEventListener("input", updateOpenAiServiceTiers);
   $("#openai-model").addEventListener("input", updateOpenAiServiceTiers);
   $("#openai-key").addEventListener("input", invalidateOpenAiApiModels);
   $("#kimi-connection").addEventListener("change", updateKimiConnection);
-  $("#kimi-cli-connect").addEventListener("click", detectKimiCli);
   $("#kimi-api-connect").addEventListener("click", () => detectKimiApi());
   $("#kimi-api-model").addEventListener("input", () => populateKimiThinking());
   $("#kimi-api-region").addEventListener("change", () => invalidateKimiApiModels());
@@ -1012,10 +850,6 @@ function wireEvents() {
   $("#kimi-code-model").addEventListener("input", () => populateKimiThinking(undefined, "code"));
   $("#kimi-code-region").addEventListener("change", () => invalidateKimiApiModels("code"));
   $("#kimi-code-key").addEventListener("input", () => invalidateKimiApiModels("code"));
-  $("#copy-kimi-command").addEventListener("click", () => copyText($("#kimi-install-command").textContent));
-  $("#codex-connect").addEventListener("click", detectCodex);
-  $("#codex-model").addEventListener("change", () => populateCodexEfforts());
-  $("#copy-codex-command").addEventListener("click", () => copyText($("#codex-install-command").textContent));
   $("#speak-source").addEventListener("click", () => {
     if (!pronunciationWord) return;
     reader.start("text", pronunciationWord);
@@ -1042,7 +876,6 @@ function wireEvents() {
   $("#translate-button").addEventListener("click", translateInput);
   $("#copy-result").addEventListener("click", () => { if (lastResult) copyText(lastResult.translatedText); });
   $("#speak-result").addEventListener("click", () => { if (lastResult) reader.start("text", lastResult.translatedText); });
-  $("#favorite-result").addEventListener("click", async () => { if (lastResult) { try { await addHistory({ ...lastResult, favorite: true }); history = await getHistory(); showToast(t("savedFavorite")); } catch { showToast(t("historyFailed")); } } });
   $("#translate-page").addEventListener("click", translatePage);
   $("#restore-page").addEventListener("click", restorePage);
   $$("#page-mode button").forEach((button) => button.addEventListener("click", async () => {
@@ -1053,15 +886,12 @@ function wireEvents() {
       renderPageMode(mode);
     } catch (error) { showToast(error.message); }
   }));
-  $("#history-search").addEventListener("input", renderHistory);
-  $("#favorites-only").addEventListener("click", () => { favoritesOnly = !favoritesOnly; $("#favorites-only").classList.toggle("active", favoritesOnly); $("#favorites-only").setAttribute("aria-pressed", String(favoritesOnly)); renderHistory(); });
-  $("#clear-history").addEventListener("click", async () => { if (confirm(t("confirmClear"))) { try { await clearHistory(); history = []; renderHistory(); showToast(t("historyCleared")); } catch { showToast(t("historyFailed")); } } });
   $("#page-limit").addEventListener("input", () => { $("#page-limit-value").textContent = $("#page-limit").value; });
   $("#theme").addEventListener("change", () => applyTheme($("#theme").value));
   $("#ui-language").addEventListener("change", () => {
     const draft = settingsDraft();
     uiLanguage = resolvedUiLanguage(draft.uiLanguage);
-    applyLanguage(); fillSettingsForm({ ...settings, ...draft }); renderHistory();
+    applyLanguage(); fillSettingsForm({ ...settings, ...draft });
     if (!pageBusy) refreshPageState();
   });
   $("#save-settings").addEventListener("click", persistSettings);
@@ -1075,14 +905,12 @@ function wireEvents() {
   chrome.storage.onChanged.addListener((changes, area) => {
     const action = changes[pendingActionKey(ownerTabId)]?.newValue;
     if (area === "session" && action) processPendingAction(action).catch((error) => showToast(error.message, 5000));
-    if (area === "local" && changes.prismHistory) { history = changes.prismHistory.newValue || []; renderHistory(); }
   });
 }
 
 async function initialize() {
   await ensureDefaults();
   settings = await getSettings();
-  history = await getHistory();
   uiLanguage = resolvedUiLanguage(settings.uiLanguage);
   applyTheme(settings.theme);
   applyLanguage();

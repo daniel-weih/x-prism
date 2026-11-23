@@ -26,7 +26,6 @@
     pageMode: "bilingual",
     showSelectionBubble: true,
     autoTranslateSelection: false,
-    saveHistory: true,
     theme: "system",
     maxPageSegments: 240
   };
@@ -67,7 +66,7 @@
   const host = document.createElement("div");
   host.id = "prism-translate-host";
   host.dataset.prismVersion = runtime.getManifest().version;
-  const shadow = host.attachShadow({ mode: "open" });
+  const shadow = host.attachShadow({ mode: "closed" });
   shadow.innerHTML = `
     <style>
       :host { all:initial; }
@@ -453,6 +452,7 @@
   }
 
   function hideBubble() { endBubbleDrag(); bubble.style.display = "none"; }
+  function clearSelectionCache() { lastSelection = ""; lastSelectionRect = null; lastPointerAnchor = null; }
   function selectionMenuDark() {
     if (settings.theme === "dark" || settings.theme === "light") return settings.theme === "dark";
     // Match the selected passage's surface, which may differ from the OS theme.
@@ -478,6 +478,7 @@
   }
 
   document.addEventListener("mouseup", (event) => {
+    if (!event.isTrusted) return;
     if (!host.isConnected) { dispose(); return; }
     if (event.target === host || !settings.showSelectionBubble) return;
     clearTimeout(selectionTimer);
@@ -492,6 +493,7 @@
         if (settings.autoTranslateSelection) translateSelection(details.text, details.rect);
       } else {
         hideBubble();
+        clearSelectionCache();
       }
     }, 10);
   }, { capture: true, signal: listeners.signal });
@@ -501,8 +503,13 @@
     if (event.composedPath().includes(host)) return;
     clearTimeout(selectionTimer);
     hideBubble();
+    clearSelectionCache();
     if (card.classList.contains("anchored") || !dockDetails.inert) dismissSelection();
   }, { capture: true, signal: listeners.signal });
+
+  document.addEventListener("selectionchange", () => {
+    if (!document.getSelection()?.toString().trim()) clearSelectionCache();
+  }, { signal: listeners.signal });
 
   async function detectLanguage(text) {
     if ("LanguageDetector" in globalThis) {
@@ -616,9 +623,8 @@
     resultNode.classList.add("loading");
     metaNode.textContent = "";
     providerNode.textContent = settings.provider === "chrome" ? "ON-DEVICE"
-      : settings.provider === "codex" ? "OPENAI CLI"
-      : settings.provider === "openai" ? `OPENAI ${(settings.openaiConnection || "api").toUpperCase()}`
-      : settings.provider === "kimi" ? `KIMI ${(settings.kimiConnection || "cli").toUpperCase()}` : settings.provider.toUpperCase();
+      : settings.provider === "codex" || settings.provider === "openai" ? "OPENAI API"
+      : settings.provider === "kimi" ? `KIMI ${(settings.kimiConnection || "code").toUpperCase()}` : settings.provider.toUpperCase();
     showSelectionCard(rect);
     try {
       const result = await translateTexts([text], (label) => { if (request === selectionRequest) metaNode.textContent = label; });
@@ -633,17 +639,6 @@
       selectionState = { kind: "translation", state: "done", progress: 1 };
       renderOrb();
       positionSelectionCard();
-      if (settings.saveHistory) {
-        sendRuntimeMessage({
-          type: "PRISM_ADD_HISTORY",
-          entry: { sourceText: text, translatedText: translated, sourceLanguage: result.source, targetLanguage: result.target, provider: result.provider }
-        }).then((response) => { if (!response?.ok) throw new Error(response?.error || "History unavailable"); }).catch((error) => {
-          if (request !== selectionRequest) return;
-          if (contextLost(error)) disconnected = true;
-          // Saving history must never replace a successfully displayed translation.
-          showToast(chineseUi() ? "译文已完成，但未能保存历史记录。" : "Translation complete; history could not be saved.");
-        });
-      }
     } catch (error) {
       if (request !== selectionRequest) return;
       if (contextLost(error)) { showReconnect(text, rect, false); return; }
@@ -957,8 +952,8 @@
     CSS.highlights?.delete("prism-reading");
     if (selectionOnly) {
       const selection = getSelection();
-      const text = selection?.toString().trim() || lastSelection;
-      if (selection?.rangeCount) readingNodes.set(0, selection.getRangeAt(0).cloneRange());
+      const text = selection?.toString().trim() || "";
+      if (text && selection?.rangeCount) readingNodes.set(0, selection.getRangeAt(0).cloneRange());
       return { ok: true, paragraphs: text ? [{ id: 0, text }] : [], snapshot: readingSnapshot, url: readingUrl };
     }
     const visible = element => {
@@ -1012,6 +1007,9 @@
         closeReader(); sendResponse({ ok: false, error: "Reading page changed." }); return false;
       }
       if (message.type === "PRISM_READER_ATTACH") {
+        if (readerAttached) {
+          sendResponse({ ok: false, error: "Reading session already attached." }); return false;
+        }
         readerAttached = true;
         sendResponse({ ...readerRequest, toggleRevision: readerToggleRevision }); return false;
       }
@@ -1041,8 +1039,9 @@
     if (message?.type === "PRISM_READING_HIGHLIGHT") { highlightReading(message); sendResponse({ ok: true }); return false; }
     if (message?.type === "PRISM_TRANSLATE_SELECTION") {
       const details = selectionDetails();
-      translateSelection(message.text || details?.text || lastSelection, details?.rect);
-      sendResponse({ ok: true, hasSelection: Boolean(details?.text || lastSelection) });
+      const text = message.text || details?.text || "";
+      translateSelection(text, details?.rect);
+      sendResponse({ ok: true, hasSelection: Boolean(text) });
       return false;
     }
     if (message?.type === "PRISM_TRANSLATE") {

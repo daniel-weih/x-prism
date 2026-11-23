@@ -15,10 +15,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(readFileSync(resolve(root, "manifest.json"), "utf8"));
 
 assert.equal(manifest.manifest_version, 3);
-assert.ok(Number(manifest.minimum_chrome_version) >= 116);
+assert.ok(Number(manifest.minimum_chrome_version) >= 130);
+assert.equal(manifest.web_accessible_resources?.[0]?.use_dynamic_url, true, "Use dynamic URL for web-accessible reader");
 assert.ok(!manifest.permissions.includes("tabs"), "Avoid broad tabs permission");
+assert.ok(!manifest.permissions.includes("nativeMessaging"), "Avoid nativeMessaging permission");
 assert.ok(manifest.permissions.includes("scripting"), "On-demand recovery requires scripting permission");
-assert.ok(!manifest.host_permissions.includes("<all_urls>"), "Avoid broad required host access");
+assert.equal(manifest.host_permissions, undefined, "Require zero permanent host permissions");
 assert.equal(manifest.side_panel, undefined, "Do not register a window-wide side panel");
 
 const referencedPaths = [

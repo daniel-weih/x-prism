@@ -38,7 +38,11 @@ test('reader relay binds its iframe to the owning tab and permits only reader op
     { ...sender, url: sender.url.replace(session, 'not-current') }
   ]) await assert.rejects(relayReaderMessage(api, invalid, request), /Invalid reader/);
   await assert.rejects(relayReaderMessage(api, sender, { ...request, message: { type: 'PRISM_REMOTE_TRANSLATE' } }), /Invalid reader/);
-  assert.equal(calls.length, 3);
+  const dynamicApi = { runtime: { id: 'prism-test', getURL: path => `chrome-extension://dynamic-guid-1234/${path}` },
+    tabs: { sendMessage: async (...args) => { calls.push(args); return { ok: true }; } } };
+  await relayReaderMessage(dynamicApi, { ...sender, url: `chrome-extension://prism-test/reader/reader.html?session=${session}` }, request);
+  await assert.rejects(relayReaderMessage(dynamicApi, { ...sender, url: `chrome-extension://other-guid/reader/reader.html?session=${session}` }, request), /Invalid reader/);
+  assert.equal(calls.length, 4);
 });
 
 test('page action recovery never redirects a closed owning tab to another active tab', async () => {

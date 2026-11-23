@@ -36,3 +36,11 @@
 1.8.0 OpenAI 全球官方接口的文本翻译统一使用 Responses API，支持标准、Fast 和 Ultrafast 三个服务档位。已保存的全球官方 Chat Completions 地址自动迁移，原有 Fast 选择保留。官方接口的翻译候选列表仅展示已知支持 Responses API 的文本模型。
 
 1.8.1 修复打开 XML 订阅页时出现的 `prismVersion` 错误。网页工具栏仅在 HTML 文档中初始化，版本标记取自扩展清单。
+
+1.9.0 安全收敛与接口精简：网页浮层改用 `closed` Shadow DOM，划词 `mouseup` 校验 `event.isTrusted`，`PRISM_READER_ATTACH` 限制为单次附着；移除本机 Codex / Kimi CLI 连接器与 `nativeMessaging` 权限；OpenAI API 锁定官方 `/v1/responses` 地址并收敛 `optional_host_permissions` 至 5 个官方域名；移除 OpenAI `/v1/chat/completions` 与 `gpt-audio-1.5`，朗读统一使用官方 Realtime API（`gpt-realtime-2.1` / `gpt-realtime-2.1-mini`）。
+
+1.10.0 进一步收敛权限与本地存储：移除翻译历史与收藏落盘功能（初始化时清理旧版 `prismHistory`），翻译入口统一校验语言码；移除 MyMemory 引擎及全部常驻 `host_permissions`，扩展默认零常驻网络权限。
+
+1.11.0 最低支持版本提升至 Chrome 130，并为 `reader/reader.html` 开启 `use_dynamic_url: true`，防止网页通过固定扩展 ID 探测扩展是否安装；同步兼容动态 URL 与静态扩展 ID 的朗读帧校验。
+
+1.11.1 修复取消选区后朗读/翻译选区可能回退读取过期缓存文本的问题（保留对当前主动选中文本的支持）；将 `chrome.storage.local` 访问级别收敛为 `TRUSTED_CONTEXTS`，阻止内容脚本读取本地存储的 API Key。

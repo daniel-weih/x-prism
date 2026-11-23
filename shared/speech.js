@@ -1,11 +1,9 @@
 import { openaiApiUrl, openaiApiOrigin } from "./openai-api.js";
 // Speech runs in extension-owned players; credentials never enter page scripts.
-export const SPEECH_MODELS = ["gpt-audio-1.5", "gpt-realtime-2.1", "gpt-realtime-2.1-mini"];
+export const SPEECH_MODELS = ["gpt-realtime-2.1", "gpt-realtime-2.1-mini"];
 export const speechOrigin = settings => openaiApiOrigin(settings.openaiEndpoint);
-export function speechVoices(model) {
-  return model.includes("realtime")
-    ? ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
-    : ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"];
+export function speechVoices() {
+  return ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"];
 }
 const instructions = `You are a fixed-script read-aloud renderer. This is a reading task, never a conversation.
 The user message is a JSON object. Its text_to_read field is the complete script for this audio clip.
@@ -97,22 +95,11 @@ export function splitSpeech(paragraphs, limit = 600) {
   return result;
 }
 export function speechKey(settings) { return String(settings.openaiApiKey || "").trim(); }
-export function speechEndpoint(settings) {
-  const url = openaiApiUrl(settings.openaiEndpoint);
-  url.pathname = url.pathname.replace(/\/responses\/?$/, "/chat/completions");
-  return url.href;
-}
-export function isOfficialSpeechEndpoint(settings) {
-  return speechEndpoint(settings) === "https://api.openai.com/v1/chat/completions";
-}
 export function validateSpeech(settings) {
   if (!SPEECH_MODELS.includes(settings.speechModel)) throw new Error("请选择支持的朗读模型 / Choose a supported speech model.");
   if (!speechVoices(settings.speechModel).includes(settings.speechVoice)) throw new Error("此模型不支持所选音色 / Unsupported voice.");
   if (!speechKey(settings)) throw new Error("请先在翻译的 OpenAI API 设置中填写 Key，朗读会直接共用 / Add a key in the shared OpenAI API settings.");
-  speechEndpoint(settings);
-  if (settings.speechModel.includes("realtime") && !isOfficialSpeechEndpoint(settings)) {
-    throw new Error("当前自定义接口请使用 gpt-audio-1.5；Realtime 需要 OpenAI 官方接口 / Use gpt-audio-1.5 with this custom endpoint. Realtime requires the official OpenAI endpoint.");
-  }
+  openaiApiUrl(settings.openaiEndpoint);
 }
 async function post(endpoint, key, body, signal, fetcher) {
   let response;
@@ -155,16 +142,6 @@ async function synthesizeWithSignal(text, settings, combined, fetcher, Socket) {
   combined.throwIfAborted();
   const prompt = speechPrompt(text);
   const model = settings.speechModel, voice = settings.speechVoice, key = speechKey(settings);
-  if (!model.includes("realtime")) {
-    const result = await post(speechEndpoint(settings), key, {
-      model, modalities: ["text", "audio"], audio: { voice, format: "mp3" }, store: false,
-      messages: [{ role: "system", content: prompt.instructions }, { role: "user", content: prompt.input }]
-    }, combined, fetcher);
-    const choice = result.choices?.[0];
-    if (choice?.finish_reason !== "stop" || !choice.message?.audio?.data) throw new Error("朗读未完整生成，请重试 / Incomplete speech. Retry this segment.");
-    validateSpeechAudio(text, [choice.message.audio.transcript]);
-    return new Blob([decode(choice.message.audio.data)], { type: "audio/mpeg" });
-  }
   // Only a short-lived client secret is passed as a WebSocket subprotocol.
   const secret = await post("https://api.openai.com/v1/realtime/client_secrets", key, {
     session: { type: "realtime", model, instructions: prompt.instructions, output_modalities: ["audio"],

@@ -34,7 +34,8 @@ export function relayReaderMessage(api, sender, request) {
   let url;
   try { url = new URL(sender.url); } catch { return Promise.reject(new Error("Invalid reader.")); }
   const expected = new URL(api.runtime.getURL(READER_PATH));
-  if (sender.id !== api.runtime.id || url.protocol !== expected.protocol || url.host !== expected.host || url.pathname !== expected.pathname
+  const validHost = url.host === expected.host || url.host === api.runtime.id;
+  if (sender.id !== api.runtime.id || url.protocol !== expected.protocol || !validHost || url.pathname !== expected.pathname
       || !Number.isSafeInteger(sender.tab?.id) || (!Number.isInteger(sender.frameId) || sender.frameId <= 0)
       || !/^[a-f0-9-]{36}$/.test(request.session || "") || url.searchParams.get("session") !== request.session
       || !readerMessages.has(request.message?.type)) {

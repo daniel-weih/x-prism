@@ -2,9 +2,9 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Prism is a Chrome extension for web translation and AI read aloud. Select text to translate or listen, view a page in two languages, or listen to an article while keeping the source in view. A compact selection menu and a circular button in the bottom-right corner keep these actions close to what you are reading. The side panel remains available for settings, history, and typed text.
+Prism is a Chrome extension for web translation and AI read aloud. Select text to translate or listen, view a page in two languages, or listen to an article while keeping the source in view. A compact selection menu and a circular button in the bottom-right corner keep these actions close to what you are reading. The side panel remains available for settings and typed text.
 
-Translation supports Chrome's on-device models, OpenAI, Kimi, and MyMemory. Read aloud uses OpenAI with selectable models, voices, and playback speed, sharing the service and API key configured for OpenAI translation.
+Translation supports Chrome's on-device models, OpenAI, and Kimi. Read aloud uses OpenAI with selectable models, voices, and playback speed, sharing the API key configured for OpenAI translation.
 
 ## Interface Preview
 
@@ -20,12 +20,11 @@ Translation supports Chrome's on-device models, OpenAI, Kimi, and MyMemory. Read
 - **Continuous reading:** prepare upcoming audio while preserving paragraph boundaries, and highlight the source paragraph belonging to the current clip.
 - **English pronunciation:** look up US IPA offline, then use the configured OpenAI service to hear the word.
 - **Circular page controls:** page translation and reading start with a small button in the bottom-right corner showing progress and status in its ring. Click to expand progress, playback controls, or a selection translation you collapsed. Reading continues when collapsed. No side panel opens automatically. Each reader belongs to its source tab.
-- **History and favorites:** search, save, and remove translations in the current Chrome profile.
 - **Interface preferences:** English and Simplified Chinese, light and dark themes, and translation progress.
 
 ## Install and Run
 
-Requires Chrome 116 or later. On-device translation requires desktop Chrome 138 or later and supported language packs; other translation providers are available on older supported Chrome versions.
+Requires Chrome 130 or later. On-device translation requires desktop Chrome 138 or later and supported language packs; other translation providers are available on older supported Chrome versions.
 
 1. Download or clone the project and keep the `x-prism` directory on your computer.
 2. Open `chrome://extensions` and enable **Developer mode**.
@@ -59,41 +58,23 @@ Reading started from the selection menu or page context menu shows a circular bu
 | Provider | Processing | Credentials |
 | --- | --- | --- |
 | Chrome Local AI | On-device translation; language packs may download on first use | None |
-| OpenAI · Local Codex CLI | The model service configured in the local Codex CLI | Existing Codex login |
-| OpenAI · API | The configured OpenAI or compatible endpoint | Your API key |
-| Kimi · Local CLI | The service used by the local Kimi Code CLI | Existing Kimi Code login |
+| OpenAI · API | Official OpenAI Responses API (`https://api.openai.com/v1/responses`) | Your OpenAI API key |
 | Kimi · Open Platform API | The selected domestic or international Moonshot API | Your API key for that region |
-| MyMemory | MyMemory's online translation service | None |
+| Kimi · Code Subscription API | The selected domestic or international Kimi Code API | Your subscription key for that region |
 
 When the detected source and selected target language match, Prism switches the target between English and Chinese. Page translation skips navigation, forms, code, and hidden content. Changed page fragments are skipped, and page navigation invalidates pending results.
 
 ### OpenAI API
 
-In **Settings → OpenAI → API**, enter the endpoint, API key, and text model. Standard, Fast, and Ultrafast all use `https://api.openai.com/v1/responses`. Prism updates the saved global OpenAI Chat Completions address automatically. For a compatible service, enter its Responses or Chat Completions endpoint.
+In **Settings → OpenAI**, enter your official OpenAI API key and text model. Standard, Fast, and Ultrafast all use the fixed official endpoint `https://api.openai.com/v1/responses`.
 
-Use **Detect connection and refresh models** to load the service's model list, or enter a model ID manually if the service does not provide one. Leave reasoning effort at the model default unless the chosen model supports an explicit value. Save your settings before translating.
+Use **Detect connection and refresh models** to load the account's supported Responses API text models, or enter a model ID manually. Leave reasoning effort at the model default unless the chosen model supports an explicit value. Save your settings before translating.
 
-Chrome asks for access to the configured origin. Remote endpoints must use HTTPS; localhost services may use HTTP. Requests omit browser cookies and reject redirects. API credentials are separate from a Codex CLI login.
+Chrome asks for access to `https://api.openai.com/*`. Requests omit browser cookies and reject redirects.
 
-**Service tier** controls OpenAI API translation independently of reasoning effort. Standard is the default, and existing Fast selections carry over. Fast costs more and requires a supported model and endpoint. Compatible providers use their default tier when Standard is selected. [OpenAI Fast pricing](https://developers.openai.com/api/docs/pricing#fast-pricing-data)
+**Service tier** controls OpenAI API translation independently of reasoning effort. Standard is the default, and existing Fast selections carry over. Fast costs more and requires a supported model. [OpenAI Fast pricing](https://developers.openai.com/api/docs/pricing#fast-pricing-data)
 
-**Ultrafast** costs more than Fast and is available for `gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6-astra`, and `gpt-6.1-sol` on the global OpenAI endpoint. Availability depends on your API project and service limits. [OpenAI Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode)
-
-### Local CLI Connectors
-
-The optional Codex and Kimi connectors require macOS or Linux, Node.js 20+, and an installed, signed-in CLI. They use cloud model services, not offline inference. Windows installation scripts are not provided.
-
-Select the provider's **Local CLI** mode in Settings. Copy the setup command shown there, including your extension ID, and run it from the project directory:
-
-```bash
-node scripts/install-codex-host.mjs <extension-id>
-# Or, for Kimi:
-node scripts/install-kimi-host.mjs <extension-id>
-```
-
-Detect the connection, choose a model, and save. CLI and API model settings are stored separately. The connectors use Chrome Native Messaging, allow only the registered extension ID, and do not open a local TCP server or copy login credentials. Translation runs in isolated temporary sessions with tools disabled.
-
-Installers target Google Chrome by default. An alternative Chromium browser's NativeMessagingHosts directory can be supplied as the second argument. `PRISM_CODEX_BIN` and `PRISM_KIMI_BIN` can point to custom CLI executables. Reinstall the connector after moving the project directory. If Codex is signed out, run `codex login` before detecting it again.
+**Ultrafast** costs more than Fast and is available for `gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6-astra`, and `gpt-6.1-sol`. Availability depends on your API project and service limits. [OpenAI Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode)
 
 ### Kimi Open Platform API
 
@@ -101,13 +82,13 @@ Choose **Settings → Kimi → Open Platform API**, select the domestic or inter
 
 ## OpenAI Read Aloud
 
-1. Configure the endpoint and key in **OpenAI → API** translation settings.
+1. Enter your official OpenAI API key in **Settings → OpenAI**.
 2. Under **OpenAI · Read aloud**, choose a model, voice, and playback speed.
 3. Preview the voice, then save. Preview uses the current draft; page reading uses saved settings.
 
-There is no second API key to enter. Translation can still use a different provider, but reading requires the shared OpenAI API connection even when translation runs locally. A Codex CLI login does not replace an API key.
+There is no second API key to enter. Translation can still use a different provider, but reading requires the shared official OpenAI API key even when translation runs locally.
 
-The current model selector includes `gpt-audio-1.5`, `gpt-realtime-2.1`, and `gpt-realtime-2.1-mini`. Available voices follow the selected model; access depends on your account. Chat audio uses Chat Completions on the configured service. Realtime requires the global OpenAI endpoint.
+The current model selector includes `gpt-realtime-2.1` and `gpt-realtime-2.1-mini`, using OpenAI's official Realtime API (`client_secrets` + WebSocket). Available voices follow the selected model; access depends on your account.
 
 Each source paragraph is synthesized separately; adjacent short paragraphs are not combined. The opening clip is kept shorter; later clips are longer. The player targets an estimated 25-second buffer, allows at most two synthesis requests at once, and retains no more than four future clips plus the current clip. Pausing stops further prefetching; stopping cancels outstanding requests. Each clip must finish generating before playback starts.
 
@@ -118,7 +99,7 @@ Article extraction varies by website and skips navigation, forms, hidden content
 ## Privacy
 
 - No bundled API keys, analytics, advertising, or remote UI scripts.
-- API keys and translation history stay in local extension storage; keys are excluded from Chrome Sync.
+- API keys stay in local extension storage and are excluded from Chrome Sync; translation text is not saved to local history.
 - Cloud translation and read aloud send the requested text to the configured service. Local translation does not make reading offline.
 - Audio remains in player memory and is not saved to translation history or a persistent cache.
 

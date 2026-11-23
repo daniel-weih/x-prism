@@ -2,24 +2,22 @@
   "manifest_version": 3,
   "name": "Prism",
   "short_name": "Prism",
-  "version": "1.8.1",
+  "version": "1.11.1",
   "description": "Translate selected text and bilingual pages, or read words and articles aloud with your choice of OpenAI models and voices.",
-  "minimum_chrome_version": "116",
+  "minimum_chrome_version": "130",
   "permissions": [
-    "nativeMessaging",
     "activeTab",
     "contextMenus",
     "scripting",
     "sidePanel",
     "storage"
   ],
-  "host_permissions": [
-    "https://api.mymemory.translated.net/*"
-  ],
   "optional_host_permissions": [
-    "https://*/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "https://api.openai.com/*",
+    "https://api.moonshot.cn/*",
+    "https://api.moonshot.ai/*",
+    "https://api.kimi.com/*",
+    "https://api.kimi.ai/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -85,7 +83,8 @@
       "matches": [
         "http://*/*",
         "https://*/*"
-      ]
+      ],
+      "use_dynamic_url": true
     }
   ]
 }

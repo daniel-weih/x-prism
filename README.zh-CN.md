@@ -2,9 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字即可翻译或朗读，也可以将整页转为双语对照，一边查看原文，一边听文章。轻量划词菜单和右下角圆形悬浮按钮让这些操作靠近正在阅读的内容。侧边栏保留设置、历史和手动输入功能。
+Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字即可翻译或朗读，也可以将整页转为双语对照，一边查看原文，一边听文章。轻量划词菜单和右下角圆形悬浮按钮让这些操作靠近正在阅读的内容。侧边栏保留设置和手动输入功能。
 
-翻译支持 Chrome 本地模型、OpenAI、Kimi 和 MyMemory。朗读使用 OpenAI，可选择模型、音色和播放速度，与 OpenAI 翻译共用服务地址和 API Key。
+翻译支持 Chrome 本地模型、OpenAI 和 Kimi。朗读使用 OpenAI，可选择模型、音色和播放速度，与 OpenAI 翻译共用 API Key。
 
 ## 界面预览
 
@@ -20,12 +20,11 @@ Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字�
 - **连续播放**：保留原段落边界，提前准备后续音频，并高亮当前片段对应的原文段落。
 - **英语单词**：离线查询美式 IPA，使用已配置的 OpenAI 服务朗读原单词。
 - **圆形悬浮按钮**：整页翻译和朗读默认在网页右下角显示一个小圆，圆环提示进度和状态；点击展开进度、播放控件或主动收起的划词译文。收起后朗读继续，无需自动展开侧边栏。每个播放器关联各自的来源页面。
-- **历史与收藏**：在当前 Chrome 资料中搜索、收藏和删除译文。
 - **界面偏好**：中英文切换、浅深色主题，以及翻译进度提示。
 
 ## 安装与运行
 
-最低支持 Chrome 116。本地翻译需要桌面版 Chrome 138 或更高版本及支持的语言包；较旧的受支持版本可以使用其他翻译服务。
+最低支持 Chrome 130。本地翻译需要桌面版 Chrome 138 或更高版本及支持的语言包；较旧的受支持版本可以使用其他翻译服务。
 
 1. 下载或克隆项目，将 `x-prism` 目录保留在电脑上。
 2. 打开 `chrome://extensions`，开启**开发者模式**。
@@ -59,41 +58,23 @@ Prism 是一款支持网页翻译与 AI 朗读的 Chrome 扩展。选中文字�
 | 服务 | 处理方式 | 凭据 |
 | --- | --- | --- |
 | Chrome Local AI | 在设备内翻译；首次使用可能下载语言包 | 无 |
-| OpenAI · 本机 Codex CLI | 使用本机 Codex 配置的模型服务 | 已有 Codex 登录 |
-| OpenAI · API | 使用配置的 OpenAI 或兼容接口 | 用户自己的 API Key |
-| Kimi · 本机 CLI | 使用本机 Kimi Code 的模型服务 | 已有 Kimi Code 登录 |
+| OpenAI · API | 固定使用 OpenAI 官方 Responses 接口（`https://api.openai.com/v1/responses`） | 用户自己的 OpenAI API Key |
 | Kimi · 开放平台 API | 使用所选国内或国际 Moonshot 接口 | 对应区域的 API Key |
-| MyMemory | MyMemory 在线翻译服务 | 无 |
+| Kimi · Code 订阅 API | 使用所选国内或国际 Kimi Code 订阅接口 | 对应区域的订阅 Key |
 
 源语言与目标语言相同时，Prism 会在中文和英文之间切换目标语言。整页翻译会跳过导航、表单、代码和隐藏内容；已经变化的片段会被跳过，网页跳转后旧请求结果不再写入。
 
 ### OpenAI API
 
-在**设置 → OpenAI → API**中填写接口地址、API Key 和文本模型。全球官方接口的标准、Fast 和 Ultrafast 档位均使用 `https://api.openai.com/v1/responses`。升级后，已保存的全球官方 Chat Completions 地址会自动迁移。自定义兼容服务可填写其 Responses 或 Chat Completions 地址。
+在**设置 → OpenAI**中填写官方 API Key 和文本模型。标准、Fast 和 Ultrafast 档位均固定使用官方地址 `https://api.openai.com/v1/responses`。
 
-点击**检测连接并刷新模型**读取服务提供的模型列表；服务不支持模型列表时，也可以手动填写模型 ID。除非模型支持明确指定推理强度，否则保持默认选项。翻译前先保存设置。
+点击**检测连接并刷新模型**读取账号可用的 Responses API 文本模型，也可以手动填写模型 ID。除非模型支持明确指定推理强度，否则保持默认选项。翻译前先保存设置。
 
-Chrome 会请求访问所配置域名的权限。远程接口必须使用 HTTPS，本机服务可使用 HTTP。请求不携带浏览器 Cookie，并拒绝重定向。API 凭据与 Codex CLI 登录独立。
+Chrome 会请求访问 `https://api.openai.com/*` 权限。请求不携带浏览器 Cookie，并拒绝重定向。
 
-**服务档位**仅用于 OpenAI API 翻译，与推理强度独立。默认使用标准档位，升级后保留已有 Fast 设置。Fast 费用更高，需模型和接口支持。兼容接口选择标准时沿用服务商的默认档位。[OpenAI Fast 定价表](https://developers.openai.com/api/docs/pricing#fast-pricing-data)
+**服务档位**仅用于 OpenAI API 翻译，与推理强度独立。默认使用标准档位，升级后保留已有 Fast 设置。Fast 费用更高，需模型支持。[OpenAI Fast 定价表](https://developers.openai.com/api/docs/pricing#fast-pricing-data)
 
-**Ultrafast** 费用高于 Fast。选择 `gpt-6.2-astra`、`gpt-6.2-sol`、`gpt-6-astra` 或 `gpt-6.1-sol`，在 OpenAI 全球官方接口上即可选择 Ultrafast。实际可用性取决于 API 项目和服务限额。[OpenAI Ultrafast 指南](https://developers.openai.com/api/docs/guides/ultrafast-mode)
-
-### 本机 CLI 连接器
-
-可选的 Codex 和 Kimi 连接器需要 macOS 或 Linux、Node.js 20+，以及已安装并登录的 CLI。它们使用云端模型服务，不是离线推理；目前没有 Windows 安装脚本。
-
-在设置中选择对应服务的**本机 CLI**模式，复制页面提供的安装命令及实际扩展 ID，在项目目录运行：
-
-```bash
-node scripts/install-codex-host.mjs <扩展ID>
-# 使用 Kimi 时运行：
-node scripts/install-kimi-host.mjs <扩展ID>
-```
-
-检测连接、选择模型并保存。CLI 与 API 模式分别保存模型配置。连接器通过 Chrome Native Messaging 工作，仅允许已注册的扩展 ID 连接，不监听本地 TCP 端口，也不复制登录凭据。翻译在关闭工具能力的独立临时会话中进行。
-
-安装脚本默认注册到 Google Chrome；其他 Chromium 浏览器可将 NativeMessagingHosts 目录作为第二个参数传入。`PRISM_CODEX_BIN` 和 `PRISM_KIMI_BIN` 可指定 CLI 可执行文件。移动项目目录后需要重新安装连接器。如果 Codex 尚未登录，先运行 `codex login`，再检测连接。
+**Ultrafast** 费用高于 Fast，适用于 `gpt-6.2-astra`、`gpt-6.2-sol`、`gpt-6-astra` 和 `gpt-6.1-sol`。实际可用性取决于 API 项目和服务限额。[OpenAI Ultrafast 指南](https://developers.openai.com/api/docs/guides/ultrafast-mode)
 
 ### Kimi 开放平台 API
 
@@ -101,13 +82,13 @@ node scripts/install-kimi-host.mjs <扩展ID>
 
 ## OpenAI 朗读
 
-1. 在翻译的 **OpenAI → API** 设置中填写接口地址和 Key。
+1. 在翻译的 **OpenAI** 设置中填写官方 API Key。
 2. 到 **OpenAI · 朗读设置**选择模型、音色和播放速度。
 3. 试听后保存。试听使用当前草稿，网页朗读使用已保存的配置。
 
-无需再填第二份 Key。翻译可以继续使用其他服务，但即使翻译在本地运行，朗读仍需要共用的 OpenAI API 连接。Codex CLI 登录不能代替 API Key。
+无需再填第二份 Key。翻译可以继续使用其他服务，但即使翻译在本地运行，朗读仍需要共用的 OpenAI 官方 API Key。
 
-当前模型选项包括 `gpt-audio-1.5`、`gpt-realtime-2.1` 和 `gpt-realtime-2.1-mini`，音色随模型匹配，实际访问权限取决于账号。Chat 音频使用同一服务的 Chat Completions 接口。Realtime 需要 OpenAI 全球官方接口。
+当前模型选项包括 `gpt-realtime-2.1` 和 `gpt-realtime-2.1-mini`，使用 OpenAI 官方 Realtime API（短时效 `client_secrets` + WebSocket）。可用音色随模型匹配，实际访问权限取决于账号。
 
 每个原段落独立合成，相邻短段落不会合并。首片较短，后续片段适当加长。播放器以约 25 秒的预计播放时长为缓冲目标，最多同时发起 2 个合成请求，保留当前片及最多 4 个后续片段。暂停后不再扩充缓冲，停止会取消未完成请求；每片完整生成后才开始播放。
 
@@ -118,7 +99,7 @@ node scripts/install-kimi-host.mjs <扩展ID>
 ## 隐私
 
 - 不内置 API Key、分析埋点、广告或远程界面脚本。
-- 密钥和翻译历史保存在扩展本地存储中；密钥不参与 Chrome Sync。
+- 密钥仅保存在扩展本地存储中且不参与 Chrome Sync；译文与原文不保存本地历史记录。
 - 云端翻译和朗读会将所需文字发送到配置的服务。本地翻译不代表朗读也离线。
 - 音频仅保留在播放器内存中，不写入翻译历史或持久缓存。
 

@@ -3,7 +3,35 @@ const MARKER = "__prismTranslateContentRuntimeV1";
 // of downloading or invoking Chrome's own LanguageDetector model in this fixture.
 Object.defineProperty(window, "LanguageDetector", { value: undefined, configurable: true });
 const $ = (selector) => document.querySelector(selector);
-const view = (selector) => $("#prism-translate-host")?.shadowRoot.querySelector(selector);
+const shadowRoots = new WeakMap();
+const originalAttachShadow = Element.prototype.attachShadow;
+Element.prototype.attachShadow = function (init) {
+  const root = originalAttachShadow.call(this, init);
+  shadowRoots.set(this, root);
+  return root;
+};
+let trustedMouseupForTest = false;
+const originalDocAddEventListener = document.addEventListener.bind(document);
+document.addEventListener = function (type, listener, options) {
+  if (type === "mouseup" && typeof listener === "function") {
+    return originalDocAddEventListener(type, function (event) {
+      if (!trustedMouseupForTest) return listener.call(this, event);
+      const trustedEvent = new Proxy(event, {
+        get(target, prop) {
+          if (prop === "isTrusted") return true;
+          const value = Reflect.get(target, prop, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+      });
+      return listener.call(this, trustedEvent);
+    }, options);
+  }
+  return originalDocAddEventListener(type, listener, options);
+};
+const view = (selector) => {
+  const host = $("#prism-translate-host");
+  return (host?.shadowRoot || (host && shadowRoots.get(host)))?.querySelector(selector);
+};
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const waitFor = async (condition) => {
   const deadline = Date.now() + 2000;
@@ -91,7 +119,12 @@ async function showSelectionMenu(node = $("#word"), pointer) {
   const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
   if (pointer?.reverse) selection.setBaseAndExtent(node.firstChild, node.firstChild.length, node.firstChild, 0);
   const rect = range.getBoundingClientRect();
-  node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: pointer?.x ?? rect.right, clientY: pointer?.y ?? rect.bottom }));
+  trustedMouseupForTest = true;
+  try {
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: pointer?.x ?? rect.right, clientY: pointer?.y ?? rect.bottom }));
+  } finally {
+    trustedMouseupForTest = false;
+  }
   await waitFor(() => view(".bubble")?.style.display === "flex");
 }
 
@@ -478,12 +511,6 @@ const cases = [
     await fresh({ settings: { sourceLanguage: "auto" }, detect() { throw new Error("Extension context invalidated."); } });
     await expectRecovery();
   }],
-  ["保存历史失败：已显示的译文不被覆盖", async () => {
-    await fresh({ send(message) { if (message.type === "PRISM_ADD_HISTORY") return Promise.reject(new Error("storage unavailable")); } });
-    await expectTranslation();
-    await waitFor(() => view(".toast").textContent.includes("未能保存历史"));
-    check(view(".result").textContent === "你好", "历史保存失败不得覆盖译文");
-  }],
   ["一般服务错误：保留原错误，不误报插件更新", async () => {
     await fresh({ send(message) { if (message.type === "PRISM_REMOTE_TRANSLATE") return Promise.reject(new Error("Translation service unavailable")); } });
     translate(); await waitFor(() => view(".result").textContent === "Translation service unavailable");
@@ -512,12 +539,6 @@ const cases = [
     finish({ ok: true, translations: ["旧请求结果"] });
     await new Promise((resolve) => setTimeout(resolve, 10));
     check(view(".result").textContent === "你好", "旧请求应被废弃");
-  }],
-  ["历史保存返回失败：保留译文并提示", async () => {
-    await fresh({ send(message) { if (message.type === "PRISM_ADD_HISTORY") return Promise.resolve({ ok: false, error: "quota exceeded" }); } });
-    await expectTranslation();
-    await waitFor(() => view(".toast").textContent.includes("未能保存历史"));
-    check(view(".result").textContent === "你好", "保存历史不能覆盖译文");
   }],
   ["网页收集跳过隐藏祖先、导航及可编辑区域", async () => {
     await fresh();
@@ -578,6 +599,53 @@ const cases = [
       await expectTranslation();
       check(attempts === 2, "失败的初始化不能永久留在缓存中");
     } finally { delete window.Translator; }
+  }],
+  ["安全隔离：closed Shadow DOM、忽略合成 mouseup、PRISM_READER_ATTACH 仅允许一次", async () => {
+    const remoteCalls = [];
+    await fresh({
+      settings: { autoTranslateSelection: true },
+      send(message) {
+        if (message.type === "PRISM_REMOTE_TRANSLATE") remoteCalls.push(message);
+      }
+    });
+    check($("#prism-translate-host").shadowRoot === null, "宿主应使用 closed Shadow DOM，禁止页面脚本访问内部节点");
+    const node = $("#word");
+    const range = document.createRange(); range.selectNodeContents(node);
+    const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    const rect = range.getBoundingClientRect();
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: rect.right, clientY: rect.bottom }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    check(view(".bubble").style.display !== "flex", "合成 mouseup 不得触发划词菜单");
+    check(remoteCalls.length === 0, "合成 mouseup 不得触发自动翻译请求");
+    contentMessage({ type: "PRISM_START_READING", action: { type: "read-selection", text: "One-time attach check." } });
+    const session = new URL(view(".reader-frame").src).searchParams.get("session");
+    const firstAttach = contentMessage({ type: "PRISM_READER_ATTACH", readerSession: session });
+    check(firstAttach.ok && firstAttach.paragraphs?.[0]?.text === "One-time attach check.", "首次 PRISM_READER_ATTACH 应成功");
+    const secondAttach = contentMessage({ type: "PRISM_READER_ATTACH", readerSession: session });
+    check(secondAttach && secondAttach.ok === false, "重复 PRISM_READER_ATTACH 必须被拒绝");
+  }],
+  ["取消选区后不再读取过期缓存文本，主动选中的可编辑内容仍可朗读", async () => {
+    await fresh();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.textContent = "Draft sentence in editor.";
+    document.body.append(editor);
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      const active = contentMessage({ type: "PRISM_READING_COLLECT", selection: true });
+      check(active.paragraphs?.[0]?.text === "Draft sentence in editor.", "主动选中的可编辑区域文本仍应可朗读");
+      getSelection().removeAllRanges();
+      const clearedRead = contentMessage({ type: "PRISM_READING_COLLECT", selection: true });
+      check(clearedRead.paragraphs.length === 0, "清空选区后朗读选区不得回退读取过期缓存");
+      const clearedTranslate = contentMessage({ type: "PRISM_TRANSLATE_SELECTION" });
+      check(clearedTranslate.hasSelection === false, "清空选区后翻译选区不得回退读取过期缓存");
+    } finally {
+      getSelection().removeAllRanges();
+      editor.remove();
+    }
   }]
 ];
 
