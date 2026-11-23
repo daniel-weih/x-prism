@@ -17,6 +17,7 @@ const manifest = JSON.parse(readFileSync(resolve(root, "manifest.json"), "utf8")
 assert.equal(manifest.manifest_version, 3);
 assert.ok(Number(manifest.minimum_chrome_version) >= 130);
 assert.equal(manifest.web_accessible_resources?.[0]?.use_dynamic_url, true, "Use dynamic URL for web-accessible reader");
+assert.ok(manifest.permissions.includes("offscreen"), "Offscreen audio playback requires offscreen permission");
 assert.ok(!manifest.permissions.includes("tabs"), "Avoid broad tabs permission");
 assert.ok(!manifest.permissions.includes("nativeMessaging"), "Avoid nativeMessaging permission");
 assert.ok(manifest.permissions.includes("scripting"), "On-demand recovery requires scripting permission");
@@ -40,7 +41,7 @@ assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/i, "Inline scripts are not all
 assert.doesNotMatch(html, /https?:\/\//i, "Side panel must not load remote assets");
 
 const allSourceFiles = [
-  "background.js", "content/content.js", "sidepanel/sidepanel.js",
+  "background.js", "content/content.js", "sidepanel/sidepanel.js", "reader/reader.js", "reader/offscreen.js",
   "shared/config.js", "shared/storage.js", "shared/translator.js", "shared/tab-access.js", "shared/side-panel.js"
 ];
 for (const file of allSourceFiles) {

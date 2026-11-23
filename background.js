@@ -1,13 +1,80 @@
-import { runPageAction, relayReaderMessage, relayReaderControl } from "./shared/page-actions.js";
+import { runPageAction, relayReaderMessage, relayReaderControl, verifyReaderSender } from "./shared/page-actions.js";
 import { PROVIDERS } from "./shared/config.js";
 import { ensureDefaults, getSettings } from "./shared/storage.js";
 import { lookupPronunciation } from "./shared/pronunciation.js";
 import { kimiApiSettings, listKimiApiModels, translateKimiApi, kimiApiBase } from "./shared/kimi-api.js";
 import { listOpenAiApiModels, translateOpenAiApi, openaiApiOrigin } from "./shared/openai-api.js";
+import { speechOrigin, validateSpeech } from "./shared/speech.js";
 import { CONTEXT_READ_SELECTION, CONTEXT_READ_PAGE, CONTEXT_SELECTION, createExtensionConfigurator } from "./shared/extension-setup.js";
 import { configureTabPanel, openTabPanel, pendingActionKey } from "./shared/side-panel.js";
 
 const providerIds = new Set(PROVIDERS.map(({ id }) => id));
+const OFFSCREEN_PATH = "reader/offscreen.html";
+let creatingOffscreen = null;
+
+async function hasOffscreenDocument() {
+  if (!chrome.runtime.getContexts) return false;
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_PATH)]
+  });
+  return contexts.length > 0;
+}
+
+async function ensureOffscreenDocument() {
+  if (await hasOffscreenDocument()) return;
+  if (!creatingOffscreen) {
+    creatingOffscreen = chrome.offscreen.createDocument({
+      url: OFFSCREEN_PATH,
+      reasons: ["AUDIO_PLAYBACK"],
+      justification: "Play synthesized speech audio without webpage autoplay restrictions."
+    }).catch((error) => {
+      if (!/Only a single offscreen document/i.test(error?.message || "")) throw error;
+    }).finally(() => { creatingOffscreen = null; });
+  }
+  await creatingOffscreen;
+}
+
+async function stopOffscreen(filter) {
+  if (!await hasOffscreenDocument()) return;
+  await chrome.runtime.sendMessage({ target: "offscreen", type: "PRISM_OFFSCREEN_STOP", ...filter }).catch(() => {});
+}
+
+async function handleReaderAudio(sender, message) {
+  if (!verifyReaderSender(chrome, sender, message?.session)) throw new Error("Invalid reader.");
+  const { session, action } = message;
+  if (action === "stop") {
+    await stopOffscreen({ session });
+    return { ok: true };
+  }
+  if (action === "start") {
+    const settings = await getSettings();
+    validateSpeech(settings);
+    if (!await chrome.permissions.contains({ origins: [speechOrigin(settings)] })) {
+      throw new Error("请打开设置，保存 OpenAI API 配置并允许访问服务。");
+    }
+    await ensureOffscreenDocument();
+    return chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "PRISM_OFFSCREEN_START",
+      session,
+      tabId: sender.tab.id,
+      paragraphs: message.paragraphs,
+      settings
+    });
+  }
+  if (!await hasOffscreenDocument()) return { ok: false, error: "Reading session ended." };
+  if (action === "toggle") {
+    return chrome.runtime.sendMessage({ target: "offscreen", type: "PRISM_OFFSCREEN_TOGGLE", session });
+  }
+  if (action === "move") {
+    return chrome.runtime.sendMessage({ target: "offscreen", type: "PRISM_OFFSCREEN_MOVE", session, delta: message.delta });
+  }
+  if (action === "rate") {
+    return chrome.runtime.sendMessage({ target: "offscreen", type: "PRISM_OFFSCREEN_RATE", session, rate: message.rate });
+  }
+  throw new Error("Unsupported reader audio action.");
+}
 
 const configureExtension = createExtensionConfigurator(chrome, ensureDefaults, getSettings);
 const configureOnLifecycleEvent = () => {
@@ -28,9 +95,11 @@ chrome.tabs.onCreated.addListener((tab) => prepareTabPanel(tab.id));
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
   prepareTabPanel(addedTabId);
   chrome.storage.session.remove(pendingActionKey(removedTabId)).catch(() => {});
+  void stopOffscreen({ tabId: removedTabId });
 });
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(pendingActionKey(tabId)).catch(() => {});
+  void stopOffscreen({ tabId });
 });
 
 const openPanel = (tabId, action) => openTabPanel(chrome, tabId, action);
@@ -111,6 +180,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     relayReaderMessage(chrome, sender, message).then(sendResponse)
       .catch(() => sendResponse({ ok: false, error: "Reading page is no longer available." }));
     return true;
+  }
+  if (message?.type === "PRISM_READER_AUDIO") {
+    handleReaderAudio(sender, message)
+      .then((result) => sendResponse(result || { ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "PRISM_OFFSCREEN_STATE" && sender.url === chrome.runtime.getURL(OFFSCREEN_PATH)) {
+    if (Number.isSafeInteger(message.tabId) && /^[a-f0-9-]{36}$/.test(message.session || "")) {
+      chrome.tabs.sendMessage(message.tabId, {
+        type: "PRISM_READER_AUDIO_STATE",
+        session: message.session,
+        state: message.state,
+        index: message.index,
+        total: message.total,
+        chunk: message.chunk,
+        error: message.error
+      }).catch(() => { void stopOffscreen({ session: message.session }); });
+    }
+    sendResponse({ ok: true });
+    return false;
   }
   if (message?.type === "PRISM_OPENAI_MODELS" && sender.url?.startsWith(chrome.runtime.getURL(""))) {
     assertOpenAiApiPermission()

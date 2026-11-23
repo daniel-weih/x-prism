@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relayReaderControl, relayReaderMessage, runPageAction } from '../shared/page-actions.js';
+import { relayReaderControl, relayReaderMessage, runPageAction, verifyReaderSender } from '../shared/page-actions.js';
 
 test('reader controls stay in the sending top-level tab and reject invalid callers', async () => {
   const calls = [];
@@ -51,4 +51,14 @@ test('page action recovery never redirects a closed owning tab to another active
   await assert.rejects(runPageAction(api, 22, { type: 'read-page' }));
   await assert.rejects(runPageAction(api, undefined, { type: 'page' }));
   assert.equal(queried, false); assert.equal(sent, false);
+});
+
+test('verifyReaderSender accepts both dynamic and static extension hosts for the matching session', () => {
+  const session = '22222222-2222-4222-8222-222222222222';
+  const api = { runtime: { id: 'prism-test', getURL: path => `chrome-extension://dynamic-guid-9999/${path}` } };
+  const base = { id: 'prism-test', tab: { id: 5 }, frameId: 2 };
+  assert.equal(verifyReaderSender(api, { ...base, url: `chrome-extension://dynamic-guid-9999/reader/reader.html?session=${session}` }, session), true);
+  assert.equal(verifyReaderSender(api, { ...base, url: `chrome-extension://prism-test/reader/reader.html?session=${session}` }, session), true);
+  assert.equal(verifyReaderSender(api, { ...base, frameId: 0, url: `chrome-extension://dynamic-guid-9999/reader/reader.html?session=${session}` }, session), false);
+  assert.equal(verifyReaderSender(api, { ...base, url: `chrome-extension://evil-guid/reader/reader.html?session=${session}` }, session), false);
 });

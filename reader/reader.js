@@ -1,5 +1,5 @@
 import { getSettings } from "../shared/storage.js";
-import { SpeechPlayer, speechOrigin, validateSpeech } from "../shared/speech.js";
+import { speechOrigin, validateSpeech } from "../shared/speech.js";
 
 const $ = selector => document.querySelector(selector);
 const session = new URL(location.href).searchParams.get("session");
@@ -8,25 +8,36 @@ const send = async message => {
   if (!response?.ok) throw new Error(response?.error || "Reading page is no longer available.");
   return response;
 };
+const audio = async (action, payload = {}) => {
+  const response = await chrome.runtime.sendMessage({ type: "PRISM_READER_AUDIO", session, action, ...payload });
+  if (!response?.ok) throw new Error(response?.error || "Audio playback unavailable.");
+  return response;
+};
 let settings, snapshot, closed = false, ready = false, chinese = false, heartbeat;
 const say = (zh, en) => chinese ? zh : en;
-const player = new SpeechPlayer({ onChange: render });
 let pendingToggleRevision = 0, appliedToggleRevision = 0;
 
 function applyShortcutToggle() {
   if (!ready || closed) return;
   const toggle = (pendingToggleRevision - appliedToggleRevision) % 2;
   appliedToggleRevision = pendingToggleRevision;
-  if (toggle) void player.toggle();
+  if (toggle) void audio("toggle").catch(() => {});
 }
-function onShortcut(message, sender, respond) {
-  if (sender.id !== chrome.runtime.id || message?.type !== "PRISM_READER_TOGGLE" || message.session !== session || closed
-      || !Number.isSafeInteger(message.revision) || message.revision < 1) return false;
-  pendingToggleRevision = Math.max(pendingToggleRevision, message.revision);
-  applyShortcutToggle();
-  respond({ ok: true }); return false;
+function onRuntimeMessage(message, sender, respond) {
+  if (sender.id !== chrome.runtime.id || closed || message?.session !== session) return false;
+  if (message.type === "PRISM_READER_TOGGLE") {
+    if (!Number.isSafeInteger(message.revision) || message.revision < 1) return false;
+    pendingToggleRevision = Math.max(pendingToggleRevision, message.revision);
+    applyShortcutToggle();
+    respond({ ok: true }); return false;
+  }
+  if (message.type === "PRISM_READER_AUDIO_STATE") {
+    render(message);
+    respond({ ok: true }); return false;
+  }
+  return false;
 }
-chrome.runtime.onMessage.addListener(onShortcut);
+chrome.runtime.onMessage.addListener(onRuntimeMessage);
 
 function render({ state, index, total, chunk, error }) {
   if (closed || !ready) return;
@@ -47,17 +58,17 @@ function render({ state, index, total, chunk, error }) {
 
 function close() {
   if (closed) return;
-  closed = true; clearInterval(heartbeat); player.stop();
-  chrome.runtime.onMessage.removeListener(onShortcut);
+  closed = true; clearInterval(heartbeat);
+  chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+  void chrome.runtime.sendMessage({ type: "PRISM_READER_AUDIO", session, action: "stop" }).catch(() => {});
   void send({ type: "PRISM_READER_CLOSE" }).catch(() => {});
 }
 $("#close").addEventListener("click", close);
-$("#toggle").addEventListener("click", () => player.toggle());
-$("#previous").addEventListener("click", () => player.move(-1));
-$("#next").addEventListener("click", () => player.move(1));
+$("#toggle").addEventListener("click", () => { void audio("toggle").catch(() => {}); });
+$("#previous").addEventListener("click", () => { void audio("move", { delta: -1 }).catch(() => {}); });
+$("#next").addEventListener("click", () => { void audio("move", { delta: 1 }).catch(() => {}); });
 $("#rate").addEventListener("change", () => {
-  if (!player.settings) return;
-  player.settings.speechRate = Number($("#rate").value); player.rate(player.settings.speechRate);
+  void audio("rate", { rate: Number($("#rate").value) }).catch(() => {});
 });
 $("#collapse").addEventListener("click", () => {
   void send({ type: "PRISM_READER_COLLAPSE" }).catch(close);
@@ -91,7 +102,7 @@ async function initialize() {
   snapshot = request.snapshot;
   ready = true;
   heartbeat = setInterval(() => { void send({ type: "PRISM_READER_ALIVE" }).catch(close); }, 2000);
-  void player.start(request.paragraphs, settings);
+  await audio("start", { paragraphs: request.paragraphs });
   pendingToggleRevision = Math.max(pendingToggleRevision, request.toggleRevision || 0);
   applyShortcutToggle();
 }

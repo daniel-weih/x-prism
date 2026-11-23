@@ -44,3 +44,5 @@
 1.11.0 最低支持版本提升至 Chrome 130，并为 `reader/reader.html` 开启 `use_dynamic_url: true`，防止网页通过固定扩展 ID 探测扩展是否安装；同步兼容动态 URL 与静态扩展 ID 的朗读帧校验。
 
 1.11.1 修复取消选区后朗读/翻译选区可能回退读取过期缓存文本的问题（保留对当前主动选中文本的支持）；将 `chrome.storage.local` 访问级别收敛为 `TRUSTED_CONTEXTS`，阻止内容脚本读取本地存储的 API Key。
+
+1.12.0 音频朗读播放迁移至 MV3 `offscreen` 后台文档（`AUDIO_PLAYBACK`），在保留 `reader/reader.html` 动态 URL 防探测的同时，彻底解决跨源 iframe 被浏览器拦截自动播放的问题。

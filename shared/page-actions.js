@@ -30,15 +30,18 @@ const readerMessages = new Set([
 
 // Only our extension iframe can relay to its owning top-level document. Neither
 // page scripts nor a caller-supplied tab ID can control another tab's reader.
-export function relayReaderMessage(api, sender, request) {
+export function verifyReaderSender(api, sender, session) {
   let url;
-  try { url = new URL(sender.url); } catch { return Promise.reject(new Error("Invalid reader.")); }
+  try { url = new URL(sender?.url); } catch { return false; }
   const expected = new URL(api.runtime.getURL(READER_PATH));
   const validHost = url.host === expected.host || url.host === api.runtime.id;
-  if (sender.id !== api.runtime.id || url.protocol !== expected.protocol || !validHost || url.pathname !== expected.pathname
-      || !Number.isSafeInteger(sender.tab?.id) || (!Number.isInteger(sender.frameId) || sender.frameId <= 0)
-      || !/^[a-f0-9-]{36}$/.test(request.session || "") || url.searchParams.get("session") !== request.session
-      || !readerMessages.has(request.message?.type)) {
+  return sender.id === api.runtime.id && url.protocol === expected.protocol && validHost && url.pathname === expected.pathname
+    && Number.isSafeInteger(sender.tab?.id) && Number.isInteger(sender.frameId) && sender.frameId > 0
+    && /^[a-f0-9-]{36}$/.test(session || "") && url.searchParams.get("session") === session;
+}
+
+export function relayReaderMessage(api, sender, request) {
+  if (!verifyReaderSender(api, sender, request?.session) || !readerMessages.has(request.message?.type)) {
     return Promise.reject(new Error("Invalid reader."));
   }
   return api.tabs.sendMessage(sender.tab.id, { ...request.message, readerSession: request.session }, { frameId: 0 });
